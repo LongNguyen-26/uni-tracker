@@ -1366,6 +1366,26 @@ select {
 .form textarea {
   resize: vertical;
 }
+.password-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.password-control {
+  position: relative;
+}
+.form .password-control input {
+  padding-right: 48px;
+}
+.password-control .password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  color: #687962;
+}
 .form-row {
   display: flex;
   gap: 15px;

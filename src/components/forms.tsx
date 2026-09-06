@@ -1,32 +1,121 @@
 "use client";
-import { useState, type FormEvent } from "react";
-import { ArrowRight, LoaderCircle } from "lucide-react";
+import { useId, useState, type FormEvent } from "react";
+import { ArrowRight, Eye, EyeOff, LoaderCircle } from "lucide-react";
 import Dialog from "./dialog";
 import { getSupabase } from "@/lib/supabase";
+import { errorMessage } from "@/lib/errors";
+export { errorMessage } from "@/lib/errors";
 import {
   CATEGORIES,
+  GOAL_COLORS,
+  MILESTONE_COLORS,
+  MILESTONE_LABELS,
   todayKey,
+  type MilestoneKind,
+  type GoalInput,
+  type ActivityInput,
   type Goal,
   type Activity,
   type Profile,
 } from "@/lib/timeline";
 
-export function errorMessage(error: unknown) {
-  const message =
-    error instanceof Error
-      ? error.message
-      : String((error as { message?: string })?.message || error);
-  if (message.includes("Invalid login"))
-    return "Email hoặc mật khẩu chưa đúng.";
-  if (message.includes("Email not confirmed"))
-    return "Bạn hãy xác nhận email trước khi đăng nhập.";
-  if (message.includes("rate limit"))
-    return "Bạn thao tác quá nhanh. Hãy thử lại sau ít phút.";
-  if (message.includes("Failed to fetch") || message.includes("fetch failed"))
-    return "Không thể kết nối. Hãy kiểm tra mạng và thử lại.";
-  if (message.includes("already registered"))
-    return "Email này đã đăng ký. Hãy đăng nhập.";
-  return message;
+const authEmailEnabled = process.env.NEXT_PUBLIC_AUTH_EMAIL_ENABLED === "true";
+
+function ColorPicker({
+  color,
+  onChange,
+}: {
+  color: string;
+  onChange: (color: string) => void;
+}) {
+  return (
+    <fieldset className="color-picker">
+      <legend>Màu trên timeline</legend>
+      <div>
+        {GOAL_COLORS.map((value) => (
+          <button
+            type="button"
+            key={value}
+            style={{ background: value }}
+            aria-label={`Chọn màu ${value}`}
+            aria-pressed={color.toLowerCase() === value}
+            onClick={() => onChange(value)}
+          >
+            {color.toLowerCase() === value ? "✓" : ""}
+          </button>
+        ))}
+        <label className="custom-color">
+          Tùy chọn
+          <input
+            type="color"
+            aria-label="Màu tùy chọn"
+            value={color}
+            onChange={(e) => onChange(e.target.value)}
+          />
+        </label>
+      </div>
+    </fieldset>
+  );
+}
+function MilestoneSelect({
+  value,
+  onChange,
+}: {
+  value: MilestoneKind;
+  onChange: (value: MilestoneKind) => void;
+}) {
+  return (
+    <label>
+      Loại cột mốc
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as MilestoneKind)}
+      >
+        {Object.entries(MILESTONE_LABELS).map(([key, label]) => (
+          <option key={key} value={key}>
+            {label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function PasswordField({ login }: { login: boolean }) {
+  const id = useId();
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="password-field">
+      <label htmlFor={id}>Mật khẩu</label>
+      <div className="password-control">
+        <input
+          id={id}
+          name="password"
+          type={visible ? "text" : "password"}
+          autoComplete={login ? "current-password" : "new-password"}
+          placeholder={login ? "Nhập mật khẩu" : "Tối thiểu 8 ký tự"}
+          minLength={login ? undefined : 8}
+          required
+          maxLength={128}
+        />
+        <button
+          className="password-toggle icon-button"
+          type="button"
+          aria-label={visible ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+          aria-pressed={visible}
+          aria-controls={id}
+          title={visible ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+          onClick={() => setVisible((previous) => !previous)}
+        >
+          {visible ? (
+            <EyeOff size={19} aria-hidden="true" />
+          ) : (
+            <Eye size={19} aria-hidden="true" />
+          )}
+        </button>
+      </div>
+    </div>
+  );
 }
 function Submit({
   busy,
@@ -151,20 +240,7 @@ export function AuthForm({
           </label>
         )}
         {mode !== "forgot" && (
-          <label>
-            Mật khẩu
-            <input
-              name="password"
-              type="password"
-              autoComplete={
-                mode === "login" ? "current-password" : "new-password"
-              }
-              placeholder="Tối thiểu 8 ký tự"
-              minLength={8}
-              required
-              maxLength={128}
-            />
-          </label>
+          <PasswordField key={mode} login={mode === "login"} />
         )}
         {error && (
           <p className="form-error" role="alert">
@@ -186,7 +262,7 @@ export function AuthForm({
                 : "Lưu mật khẩu"}
           <ArrowRight size={17} />
         </Submit>
-        {mode === "login" && (
+        {mode === "login" && authEmailEnabled && (
           <button
             type="button"
             className="text-button"
@@ -198,6 +274,11 @@ export function AuthForm({
           >
             Quên mật khẩu?
           </button>
+        )}
+        {!authEmailEnabled && mode === "login" && (
+          <p className="muted small">
+            Khôi phục mật khẩu qua email tạm chưa khả dụng.
+          </p>
         )}
         {mode !== "recovery" && (
           <p className="form-switch">
@@ -229,20 +310,16 @@ export function GoalForm({
   goal?: Goal;
   defaultDate: string;
   onClose: () => void;
-  onSave: (
-    data: Pick<
-      Goal,
-      | "title"
-      | "description"
-      | "category"
-      | "deadline"
-      | "progress"
-      | "completed_on"
-    >,
-    id?: string,
-  ) => Promise<void>;
+  onSave: (data: GoalInput, id?: string) => Promise<void>;
 }) {
   const [progress, setProgress] = useState(goal?.progress || 0);
+  const [trackingMode, setTrackingMode] = useState<Goal["tracking_mode"]>(
+    goal?.tracking_mode || "progress",
+  );
+  const [milestoneKind, setMilestoneKind] = useState<MilestoneKind>(
+    goal?.milestone_kind || "general",
+  );
+  const [color, setColor] = useState(goal?.color || GOAL_COLORS[0]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -260,6 +337,10 @@ export function GoalForm({
           category: String(data.get("category")),
           deadline: String(data.get("deadline")),
           progress,
+          color,
+          tracking_mode: trackingMode,
+          milestone_kind:
+            trackingMode === "milestone" ? milestoneKind : "general",
           completed_on:
             progress === 100 ? String(data.get("completed_on")) : null,
         },
@@ -291,6 +372,44 @@ export function GoalForm({
             maxLength={160}
           />
         </label>
+        <fieldset className="tracking-choice">
+          <legend>Cách theo dõi</legend>
+          <div>
+            {(
+              [
+                ["progress", "Theo tiến độ", "IELTS, viết Paper, dự án…"],
+                ["milestone", "Một cột mốc", "GPA, thi GK/CK, giải thưởng…"],
+              ] as const
+            ).map(([mode, label, hint]) => (
+              <button
+                type="button"
+                key={mode}
+                className={trackingMode === mode ? "selected" : ""}
+                aria-pressed={trackingMode === mode}
+                onClick={() => {
+                  setTrackingMode(mode);
+                  if (mode === "milestone") {
+                    setProgress(progress === 100 ? 100 : 0);
+                    setColor(MILESTONE_COLORS[milestoneKind]);
+                  }
+                }}
+              >
+                <strong>{label}</strong>
+                <span>{hint}</span>
+              </button>
+            ))}
+          </div>
+        </fieldset>
+        {trackingMode === "milestone" && (
+          <MilestoneSelect
+            value={milestoneKind}
+            onChange={(kind) => {
+              setMilestoneKind(kind);
+              setColor(MILESTONE_COLORS[kind]);
+            }}
+          />
+        )}
+        <ColorPicker color={color} onChange={setColor} />
         <div className="form-row">
           <label>
             Lĩnh vực
@@ -323,19 +442,30 @@ export function GoalForm({
             maxLength={4000}
           />
         </label>
-        <label className="range-label">
-          <span>
-            Tiến độ hiện tại <strong>{progress}%</strong>
-          </span>
-          <input
-            aria-label="Tiến độ hiện tại"
-            type="range"
-            min={0}
-            max={100}
-            value={progress}
-            onChange={(e) => setProgress(Number(e.target.value))}
-          />
-        </label>
+        {trackingMode === "progress" ? (
+          <label className="range-label">
+            <span>
+              Tiến độ hiện tại <strong>{progress}%</strong>
+            </span>
+            <input
+              aria-label="Tiến độ hiện tại"
+              type="range"
+              min={0}
+              max={100}
+              value={progress}
+              onChange={(e) => setProgress(Number(e.target.value))}
+            />
+          </label>
+        ) : (
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={progress === 100}
+              onChange={(e) => setProgress(e.target.checked ? 100 : 0)}
+            />
+            Đã đạt cột mốc này
+          </label>
+        )}
         {progress === 100 && (
           <label>
             Ngày hoàn thành
@@ -371,18 +501,25 @@ export function GoalForm({
 
 export function ActivityForm({
   activity,
+  goals,
   defaultDate,
   onClose,
   onSave,
 }: {
   activity?: Activity;
+  goals: Goal[];
   defaultDate: string;
   onClose: () => void;
-  onSave: (
-    data: Pick<Activity, "title" | "notes" | "occurred_on">,
-    id?: string,
-  ) => Promise<void>;
+  onSave: (data: ActivityInput, id?: string) => Promise<void>;
 }) {
+  const [goalId, setGoalId] = useState(activity?.goal_id || "");
+  const [color, setColor] = useState(activity?.color || GOAL_COLORS[0]);
+  const [isMilestone, setIsMilestone] = useState(
+    activity?.is_milestone || false,
+  );
+  const [milestoneKind, setMilestoneKind] = useState<MilestoneKind>(
+    activity?.milestone_kind || "achievement",
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -398,6 +535,11 @@ export function ActivityForm({
           title,
           notes: String(data.get("notes")).trim(),
           occurred_on: String(data.get("occurred_on")),
+          goal_id: goalId || null,
+          color,
+          duration_minutes: Number(data.get("duration_minutes") || 0),
+          is_milestone: isMilestone,
+          milestone_kind: isMilestone ? milestoneKind : "general",
         },
         activity?.id,
       );
@@ -428,15 +570,85 @@ export function ActivityForm({
           />
         </label>
         <label>
-          Ngày diễn ra
-          <input
-            name="occurred_on"
-            type="date"
-            required
-            max={todayKey()}
-            defaultValue={activity?.occurred_on || defaultDate}
-          />
+          Gắn với mục tiêu
+          <select
+            value={goalId}
+            onChange={(e) => {
+              setGoalId(e.target.value);
+              const goal = goals.find((g) => g.id === e.target.value);
+              if (goal) setColor(goal.color);
+            }}
+          >
+            <option value="">Không gắn mục tiêu</option>
+            {goals.map((g) => (
+              <option value={g.id} key={g.id}>
+                {g.title}
+              </option>
+            ))}
+          </select>
         </label>
+        {activity?.goal_title && !activity.goal_id && (
+          <p className="muted small">
+            Lịch sử từ mục tiêu đã xóa: {activity.goal_title}
+          </p>
+        )}
+        <div className="form-row">
+          <label>
+            Ngày diễn ra
+            <input
+              name="occurred_on"
+              type="date"
+              required
+              max={todayKey()}
+              defaultValue={activity?.occurred_on || defaultDate}
+            />
+          </label>
+          <label>
+            Thời lượng (phút)
+            <input
+              type="number"
+              name="duration_minutes"
+              min={0}
+              max={1440}
+              step={1}
+              defaultValue={activity?.duration_minutes || ""}
+              placeholder="Ví dụ: 60"
+            />
+          </label>
+        </div>
+        <p className="muted small">
+          Nhập thời gian thực tế đã dành cho việc này. Để trống nếu chỉ muốn ghi
+          chú.
+        </p>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={isMilestone}
+            onChange={(e) => {
+              setIsMilestone(e.target.checked);
+              if (e.target.checked && !goalId)
+                setColor(MILESTONE_COLORS[milestoneKind]);
+            }}
+          />
+          Đánh dấu đây là cột mốc đã đạt ★
+        </label>
+        {isMilestone && (
+          <MilestoneSelect
+            value={milestoneKind}
+            onChange={(kind) => {
+              setMilestoneKind(kind);
+              if (!goalId) setColor(MILESTONE_COLORS[kind]);
+            }}
+          />
+        )}
+        {goalId ? (
+          <p className="inherited-color">
+            <span className="color-dot" style={{ background: color }} />
+            Dùng màu của mục tiêu đã chọn.
+          </p>
+        ) : (
+          <ColorPicker color={color} onChange={setColor} />
+        )}
         <label>
           Ghi chú
           <textarea

@@ -32,6 +32,7 @@ import { getSupabase } from "@/lib/supabase";
 import {
   buildSemesters,
   CATEGORIES,
+  MILESTONE_LABELS,
   daysBetween,
   demoData,
   formatDate,
@@ -39,6 +40,8 @@ import {
   todayKey,
   type Activity,
   type Goal,
+  type GoalInput,
+  type ActivityInput,
   type Profile,
   type Semester,
 } from "@/lib/timeline";
@@ -50,6 +53,16 @@ import {
   SettingsForm,
 } from "./forms";
 import Dialog from "./dialog";
+import ProductivityPanel from "./productivity";
+import {
+  activityLabel,
+  dayBackground,
+  formatMinutes,
+  isWork,
+  summarizeDays,
+  type DaySummary,
+  type HeatmapMode,
+} from "@/lib/focus";
 
 type View = "timeline" | "goals" | "journal";
 type Modal =
@@ -66,8 +79,8 @@ const NAV = [
 
 function SemesterCard({
   semester,
-  counts,
-  deadlineCounts,
+  summaries,
+  mode,
   activities,
   goals,
   today,
@@ -76,8 +89,8 @@ function SemesterCard({
   onOpen,
 }: {
   semester: Semester;
-  counts: Map<string, number>;
-  deadlineCounts: Map<string, number>;
+  summaries: Map<string, DaySummary>;
+  mode: HeatmapMode;
   activities: Activity[];
   goals: Goal[];
   today: string;
@@ -137,20 +150,31 @@ function SemesterCard({
               <span>T6</span>
             </div>
             <div className="heatmap">
-              {semester.days.map((day, i) =>
-                day ? (
+              {semester.days.map((day, i) => {
+                const summary = day ? summaries.get(day) : undefined;
+                const title = day
+                  ? `${formatDate(day, true)} · ${formatMinutes(summary?.minutes || 0)}${summary?.label ? ` · ${summary.label}` : " · Chưa có hoạt động"}`
+                  : "";
+                return day ? (
                   <button
                     key={day}
                     type="button"
-                    className={`day-cell level-${Math.min(counts.get(day) || 0, 4)} ${day === today ? "today" : ""} ${day === selectedDay ? "selected" : ""} ${deadlineCounts.has(day) ? "has-deadline" : ""}`}
-                    title={`${formatDate(day, true)} · ${counts.get(day) || 0} hoạt động${deadlineCounts.has(day) ? ` · ${deadlineCounts.get(day)} deadline` : ""}`}
-                    aria-label={`${formatDate(day, true)}, ${counts.get(day) || 0} hoạt động${deadlineCounts.has(day) ? `, ${deadlineCounts.get(day)} mục tiêu đến hạn` : ""}`}
+                    className={`day-cell ${day === today ? "today" : ""} ${day === selectedDay ? "selected" : ""} ${summary?.deadlines.length ? "has-deadline" : ""} ${summary?.marker ? "has-marker" : ""}`}
+                    style={{ background: dayBackground(summary, mode) }}
+                    title={title}
+                    aria-label={title}
+                    aria-pressed={day === selectedDay}
                     onClick={() => onDay(day)}
-                  />
+                  >
+                    <span aria-hidden="true">{summary?.marker}</span>
+                    {(summary?.colors.length || 0) > 4 && (
+                      <i className="day-overflow" aria-hidden="true" />
+                    )}
+                  </button>
                 ) : (
                   <span className="day-cell blank" key={`blank-${i}`} />
-                ),
-              )}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -187,11 +211,15 @@ function GoalCard({
   const remaining = daysBetween(today, goal.deadline);
   const completed = goal.progress === 100;
   return (
-    <article className="goal-card">
+    <article
+      className="goal-card"
+      style={{ borderTop: `3px solid ${goal.color}` }}
+    >
       <div className="goal-top">
         <span
           className={`category category-${CATEGORIES.indexOf(goal.category)}`}
         >
+          <span className="color-dot" style={{ background: goal.color }} />
           {goal.category}
         </span>
         <div className="row-actions">
@@ -217,20 +245,33 @@ function GoalCard({
       {goal.description && (
         <p className="goal-description">{goal.description}</p>
       )}
-      <div className="progress-caption">
-        <span>{completed ? "Đã hoàn thành" : "Tiến độ"}</span>
-        <strong>{goal.progress}%</strong>
-      </div>
-      <div
-        className="progress-track"
-        role="progressbar"
-        aria-label={goal.title}
-        aria-valuenow={goal.progress}
-        aria-valuemin={0}
-        aria-valuemax={100}
-      >
-        <span style={{ width: `${goal.progress}%` }} />
-      </div>
+      {goal.tracking_mode === "progress" ? (
+        <>
+          <div className="progress-caption">
+            <span>{completed ? "Đã hoàn thành" : "Tiến độ"}</span>
+            <strong>{goal.progress}%</strong>
+          </div>
+          <div
+            className="progress-track"
+            role="progressbar"
+            aria-label={goal.title}
+            aria-valuenow={goal.progress}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <span
+              style={{ width: `${goal.progress}%`, background: goal.color }}
+            />
+          </div>
+        </>
+      ) : (
+        <div className="milestone-caption" style={{ color: goal.color }}>
+          <span>
+            {completed ? "★" : "◆"} {MILESTONE_LABELS[goal.milestone_kind]}
+          </span>
+          <strong>{completed ? "Đã đạt" : "Chưa đạt"}</strong>
+        </div>
+      )}
       <div className="goal-bottom">
         <span
           className={`deadline ${!completed && remaining < 0 ? "overdue" : ""}`}
@@ -291,6 +332,8 @@ export default function Tracker() {
   const [query, setQuery] = useState("");
   const [journalLimit, setJournalLimit] = useState(30);
   const [mobileNav, setMobileNav] = useState(false);
+  const [heatmapMode, setHeatmapMode] = useState<HeatmapMode>("goals");
+  const [heatmapGoal, setHeatmapGoal] = useState("all");
   const version = useRef({ value: 0 });
   const showDemo = useCallback(() => {
     const day = todayKey();
@@ -306,16 +349,25 @@ export default function Tracker() {
     if (!db) return;
     setLoadError("");
     try {
-      const [profileResult, goalResult] = await Promise.all([
+      const [profileResult, allGoals] = await Promise.all([
         db.from("profiles").select("*").eq("id", currentUser.id).maybeSingle(),
-        db
-          .from("goals")
-          .select("*")
-          .eq("user_id", currentUser.id)
-          .order("deadline"),
+        (async () => {
+          const rows: Goal[] = [];
+          for (let from = 0; ; from += 1000) {
+            const result = await db
+              .from("goals")
+              .select("*")
+              .eq("user_id", currentUser.id)
+              .order("deadline")
+              .order("id")
+              .range(from, from + 999);
+            if (result.error) throw result.error;
+            rows.push(...(result.data as Goal[]));
+            if (result.data.length < 1000) return rows;
+          }
+        })(),
       ]);
       if (profileResult.error) throw profileResult.error;
-      if (goalResult.error) throw goalResult.error;
       // Supabase caps each response. Read every activity page so a four-year heatmap stays complete.
       const allActivities: Activity[] = [];
       for (let from = 0; ; from += 1000) {
@@ -340,7 +392,10 @@ export default function Tracker() {
           start_month: 9,
         },
       );
-      setGoals(goalResult.data as Goal[]);
+      setGoals(allGoals);
+      setHeatmapGoal((previous) =>
+        allGoals.some((g) => g.id === previous) ? previous : "all",
+      );
       setActivities(allActivities);
       if (!savedProfile)
         setModal((previous) =>
@@ -382,6 +437,7 @@ export default function Tracker() {
       } else {
         version.current.value++;
         setSelectedDay(null);
+        setHeatmapGoal("all");
         showDemo();
       }
     });
@@ -403,20 +459,23 @@ export default function Tracker() {
       profile ? buildSemesters(profile.start_year, profile.start_month) : [],
     [profile],
   );
-  const counts = useMemo(() => {
-    const map = new Map<string, number>();
-    activities.forEach((a) =>
-      map.set(a.occurred_on, (map.get(a.occurred_on) || 0) + 1),
-    );
-    return map;
-  }, [activities]);
-  const deadlineCounts = useMemo(() => {
-    const map = new Map<string, number>();
-    goals
-      .filter((g) => g.progress < 100)
-      .forEach((g) => map.set(g.deadline, (map.get(g.deadline) || 0) + 1));
-    return map;
-  }, [goals]);
+  const workActivities = useMemo(() => activities.filter(isWork), [activities]);
+  const visibleGoals = useMemo(
+    () =>
+      heatmapGoal === "all" ? goals : goals.filter((g) => g.id === heatmapGoal),
+    [goals, heatmapGoal],
+  );
+  const visibleActivities = useMemo(
+    () =>
+      heatmapGoal === "all"
+        ? activities
+        : activities.filter((a) => a.goal_id === heatmapGoal),
+    [activities, heatmapGoal],
+  );
+  const summaries = useMemo(
+    () => summarizeDays(visibleGoals, visibleActivities),
+    [visibleGoals, visibleActivities],
+  );
   const activeGoals = goals.filter((g) => g.progress < 100);
   const completedGoals = goals.filter((g) => g.progress === 100);
   const deadlines = [...activeGoals].sort((a, b) =>
@@ -427,7 +486,9 @@ export default function Tracker() {
       b.occurred_on.localeCompare(a.occurred_on) ||
       b.created_at.localeCompare(a.created_at),
   );
-  const activeDays = [...counts.keys()].filter(
+  const activeDays = [
+    ...new Set(workActivities.map((a) => a.occurred_on)),
+  ].filter(
     (day) =>
       semesters.length && day >= semesters[0].start && day <= semesters[7].end,
   ).length;
@@ -462,18 +523,7 @@ export default function Tracker() {
       throw new Error("Hãy đăng nhập để lưu hành trình của bạn.");
     return { db, currentUser: user };
   }
-  async function saveGoal(
-    data: Pick<
-      Goal,
-      | "title"
-      | "description"
-      | "category"
-      | "deadline"
-      | "progress"
-      | "completed_on"
-    >,
-    id?: string,
-  ) {
+  async function saveGoal(data: GoalInput, id?: string) {
     const { db, currentUser } = requireUser();
     const result = id
       ? await db
@@ -492,10 +542,7 @@ export default function Tracker() {
     await loadData(currentUser);
     setNotice("Đã lưu mục tiêu.");
   }
-  async function saveActivity(
-    data: Pick<Activity, "title" | "notes" | "occurred_on">,
-    id?: string,
-  ) {
+  async function saveActivity(data: ActivityInput, id?: string) {
     const { db, currentUser } = requireUser();
     const result = id
       ? await db
@@ -536,6 +583,9 @@ export default function Tracker() {
           title: goal.title,
           description: goal.description,
           category: goal.category,
+          color: goal.color,
+          tracking_mode: goal.tracking_mode,
+          milestone_kind: goal.milestone_kind,
           deadline: goal.deadline,
           progress: 100,
           completed_on: today,
@@ -901,12 +951,20 @@ export default function Tracker() {
                     <div>
                       <span>Chuỗi ngày hiện tại</span>
                       <strong>
-                        {streak(activities, today)}
+                        {streak(workActivities, today)}
                         <small>ngày liên tiếp</small>
                       </strong>
                     </div>
                   </div>
                 </div>
+                {view === "timeline" && (
+                  <ProductivityPanel
+                    activities={activities}
+                    goals={goals}
+                    today={today}
+                    onDay={setSelectedDay}
+                  />
+                )}
                 {view === "timeline" && (
                   <div className="dashboard-columns">
                     <div className="timeline-section">
@@ -919,7 +977,8 @@ export default function Tracker() {
                             </span>
                           </h2>
                           <p className="muted small">
-                            Mỗi ô là một ngày. Mỗi sắc xanh là một bước tiến.
+                            Mỗi ô là một ngày. Bấm vào ô để xem mọi hoạt động và
+                            deadline.
                           </p>
                         </div>
                         <select
@@ -935,6 +994,67 @@ export default function Tracker() {
                           ))}
                         </select>
                       </div>
+                      <div className="heatmap-toolbar">
+                        <div
+                          className="segmented"
+                          aria-label="Cách xem timeline"
+                        >
+                          <button
+                            className={
+                              heatmapMode === "goals" ? "selected" : ""
+                            }
+                            aria-pressed={heatmapMode === "goals"}
+                            onClick={() => setHeatmapMode("goals")}
+                          >
+                            Mục tiêu & cột mốc
+                          </button>
+                          <button
+                            className={
+                              heatmapMode === "focus" ? "selected" : ""
+                            }
+                            aria-pressed={heatmapMode === "focus"}
+                            onClick={() => setHeatmapMode("focus")}
+                          >
+                            Năng suất
+                          </button>
+                        </div>
+                        <select
+                          aria-label="Lọc mục tiêu trên timeline"
+                          value={heatmapGoal}
+                          onChange={(e) => setHeatmapGoal(e.target.value)}
+                        >
+                          <option value="all">Tất cả mục tiêu</option>
+                          {goals.map((g) => (
+                            <option key={g.id} value={g.id}>
+                              {g.title}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {heatmapMode === "goals" && (
+                        <div
+                          className="goal-color-key"
+                          aria-label="Chú thích màu mục tiêu"
+                        >
+                          {visibleGoals.map((g) => (
+                            <button
+                              key={g.id}
+                              title={g.title}
+                              onClick={() =>
+                                setHeatmapGoal(
+                                  heatmapGoal === g.id ? "all" : g.id,
+                                )
+                              }
+                            >
+                              <span
+                                className="color-dot"
+                                style={{ background: g.color }}
+                              />
+                              {g.title}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       <div className="timeline-grid">
                         {[1, 2, 3, 4]
                           .filter(
@@ -964,10 +1084,10 @@ export default function Tracker() {
                                     <SemesterCard
                                       key={semester.index}
                                       semester={semester}
-                                      counts={counts}
-                                      deadlineCounts={deadlineCounts}
-                                      activities={activities}
-                                      goals={goals}
+                                      summaries={summaries}
+                                      mode={heatmapMode}
+                                      activities={visibleActivities}
+                                      goals={visibleGoals}
                                       today={today}
                                       selectedDay={selectedDay}
                                       onDay={setSelectedDay}
@@ -994,14 +1114,34 @@ export default function Tracker() {
                           <i className="legend-deadline" />
                           Có deadline
                         </span>
-                        <span className="scale">
-                          Ít
-                          {[0, 1, 2, 3, 4].map((i) => (
-                            <i key={i} className={`level-${i}`} />
-                          ))}
-                          Nhiều
+                        <span>
+                          <b>◆</b> Cột mốc
                         </span>
+                        <span>
+                          <b>G / C</b> Thi GK / CK
+                        </span>
+                        <span>
+                          <b>★</b> Đã đạt
+                        </span>
+                        {heatmapMode === "focus" ? (
+                          <span className="scale">
+                            0
+                            {[0, 1, 2, 3, 4].map((i) => (
+                              <i key={i} className={`level-${i}`} />
+                            ))}
+                            ≥ 3 giờ
+                          </span>
+                        ) : (
+                          <span>
+                            <i className="legend-split" /> Nhiều mục tiêu
+                          </span>
+                        )}
                       </div>
+                      <p className="muted small heatmap-help">
+                        {heatmapMode === "goals"
+                          ? "Màu nhạt: hoạt động/tiến độ · Màu đậm có viền: deadline · Hai mục tiêu chia chéo, 3–4 mục tiêu chia góc; dấu chấm đen báo còn mục khác."
+                          : "Sắc xanh theo thời lượng: dưới 30 phút, 30–89 phút, 90–179 phút, từ 180 phút. Ghi chú chưa có thời lượng dùng xanh nhạt."}
+                      </p>
                       <div className="journey-footer">
                         <GraduationCap size={18} />
                         <span>
@@ -1051,6 +1191,9 @@ export default function Tracker() {
                             >
                               <span
                                 className={`deadline-date ${goal.deadline < today ? "late" : ""}`}
+                                style={{
+                                  borderLeft: `3px solid ${goal.color}`,
+                                }}
                               >
                                 <strong>{goal.deadline.slice(8)}</strong>
                                 <span>
@@ -1070,7 +1213,9 @@ export default function Tracker() {
                                       ? "Đến hạn hôm nay"
                                       : `Còn ${daysBetween(today, goal.deadline)} ngày`}
                                   <i />
-                                  {goal.progress}%
+                                  {goal.tracking_mode === "milestone"
+                                    ? MILESTONE_LABELS[goal.milestone_kind]
+                                    : `${goal.progress}%`}
                                 </span>
                               </span>
                               <ChevronRight size={15} />
@@ -1099,6 +1244,7 @@ export default function Tracker() {
                           <div className="recent-item" key={activity.id}>
                             <span
                               className={`activity-dot ${activity.kind === "completion" ? "complete" : ""}`}
+                              style={{ background: activity.color }}
                             >
                               {activity.kind === "completion" ? (
                                 <Check size={12} />
@@ -1108,9 +1254,7 @@ export default function Tracker() {
                               <strong>{activity.title}</strong>
                               <span>
                                 {formatDate(activity.occurred_on, true)}
-                                {activity.kind === "completion"
-                                  ? " · Hoàn thành mục tiêu"
-                                  : ""}
+                                {` · ${activity.duration_minutes ? formatMinutes(activity.duration_minutes) : activityLabel(activity)}`}
                               </span>
                             </div>
                           </div>
@@ -1251,6 +1395,10 @@ export default function Tracker() {
                           <article className="journal-entry">
                             <span
                               className={`journal-icon ${activity.kind === "completion" ? "green" : ""}`}
+                              style={{
+                                color: activity.color,
+                                background: `${activity.color}18`,
+                              }}
                             >
                               {activity.kind === "completion" ? (
                                 <CircleCheck size={20} />
@@ -1260,13 +1408,24 @@ export default function Tracker() {
                             </span>
                             <div>
                               <span className="entry-kind">
-                                {activity.kind === "completion"
-                                  ? "HOÀN THÀNH MỤC TIÊU"
-                                  : activity.kind === "progress"
-                                    ? "CẬP NHẬT TIẾN ĐỘ"
-                                    : "HOẠT ĐỘNG"}
+                                {activity.is_milestone ? "★ " : ""}
+                                {activityLabel(activity)}
                               </span>
                               <h3>{activity.title}</h3>
+                              <p className="activity-meta">
+                                {activity.goal_title && (
+                                  <span>
+                                    {goals.find(
+                                      (g) => g.id === activity.goal_id,
+                                    )?.title || activity.goal_title}
+                                  </span>
+                                )}
+                                {activity.duration_minutes > 0 && (
+                                  <strong>
+                                    {formatMinutes(activity.duration_minutes)}
+                                  </strong>
+                                )}
+                              </p>
                               {activity.notes && <p>{activity.notes}</p>}
                             </div>
                             {activity.kind === "event" && (
@@ -1371,6 +1530,7 @@ export default function Tracker() {
       {modal?.kind === "activity" && (
         <ActivityForm
           activity={modal.activity}
+          goals={goals}
           defaultDate={modal.date || today}
           onClose={() => setModal(null)}
           onSave={saveActivity}
@@ -1432,8 +1592,18 @@ export default function Tracker() {
                     key={goal.id}
                     onClick={() => openWrite({ kind: "goal", goal })}
                   >
-                    <span>{goal.title}</span>
-                    <strong>{goal.progress}%</strong>
+                    <span>
+                      <span
+                        className="color-dot"
+                        style={{ background: goal.color }}
+                      />
+                      {goal.title}
+                    </span>
+                    <strong>
+                      {goal.tracking_mode === "milestone"
+                        ? `${goal.progress === 100 ? "★" : "◆"} ${MILESTONE_LABELS[goal.milestone_kind]}`
+                        : `${goal.progress}%`}
+                    </strong>
                   </button>
                 ))}
               </>
@@ -1447,7 +1617,27 @@ export default function Tracker() {
                 {dayActivities.map((a) => (
                   <div className="day-list-item" key={a.id}>
                     <div>
-                      <strong>{a.title}</strong>
+                      <strong>
+                        <span
+                          className="color-dot"
+                          style={{
+                            background:
+                              goals.find((g) => g.id === a.goal_id)?.color ||
+                              a.color,
+                          }}
+                        />
+                        {a.is_milestone ? "★ " : ""}
+                        {a.title}
+                      </strong>
+                      <p className="activity-meta">
+                        {activityLabel(a)}
+                        {a.duration_minutes
+                          ? ` · ${formatMinutes(a.duration_minutes)}`
+                          : ""}
+                        {a.goal_title
+                          ? ` · ${goals.find((g) => g.id === a.goal_id)?.title || a.goal_title}`
+                          : ""}
+                      </p>
                       {a.notes && <p className="muted small">{a.notes}</p>}
                     </div>
                     {a.kind === "completion" && <CircleCheck size={18} />}

@@ -11,19 +11,27 @@ let goalId;
 let eventId;
 let userId;
 try {
+  if (process.argv.includes('--signup')) {
+    const signup = await client.auth.signUp({ email: credentials.email, password: credentials.password });
+    assert.equal(signup.error, null, 'Signup succeeds without SMTP');
+    assert.ok(signup.data.session, 'Signup returns an immediate session');
+    console.log(`PASS: Immediate signup session (${signup.data.user.id}).`);
+    await client.auth.signOut();
+  }
   const { data, error } = await client.auth.signInWithPassword({ email: credentials.email, password: credentials.password });
   assert.equal(error, null, 'Password login succeeds');
   userId = data.user.id;
   const profile = await client.from('profiles').upsert({ id: userId, display_name: 'Temporary verification', start_year: 2024, start_month: 9 }).select().single();
   assert.equal(profile.error, null, 'Profile saves through REST');
-  const created = await client.from('goals').insert({ user_id: userId, title: 'Disposable verification goal', deadline: '2026-12-01', progress: 10 }).select().single();
+  const created = await client.from('goals').insert({ user_id: userId, title: 'Disposable verification goal', deadline: '2026-12-01', progress: 10, color: '#7c3aed', tracking_mode: 'progress' }).select().single();
   assert.equal(created.error, null, 'Goal insert succeeds'); goalId = created.data.id;
   const updated = await client.from('goals').update({ progress: 100, completed_on: '2026-09-06' }).eq('id', goalId).select().single();
   assert.equal(updated.error, null, 'Goal completion succeeds');
   const history = await client.from('activities').select('*').eq('goal_id', goalId);
   assert.equal(history.error, null); assert.equal(history.data.length, 2); assert.equal(history.data.filter(a => a.kind === 'completion').length, 1);
-  const event = await client.from('activities').insert({ user_id: userId, title: 'Disposable journal entry', occurred_on: '2026-09-05', kind: 'event' }).select().single();
+  const event = await client.from('activities').insert({ user_id: userId, goal_id: goalId, title: 'Disposable journal entry', occurred_on: '2026-09-05', kind: 'event', duration_minutes: 90 }).select().single();
   assert.equal(event.error, null); eventId = event.data.id;
+  assert.equal(event.data.duration_minutes, 90); assert.equal(event.data.color, '#7c3aed'); assert.equal(event.data.goal_title, 'Disposable verification goal');
   const edited = await client.from('activities').update({ title: 'Edited journal entry' }).eq('id', eventId).select().single();
   assert.equal(edited.error, null); assert.equal(edited.data.title, 'Edited journal entry');
   assert.equal((await client.auth.refreshSession()).error, null, 'Session refresh succeeds');

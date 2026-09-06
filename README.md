@@ -8,11 +8,15 @@ Website: https://uni-tracker-sigma.vercel.app
 
 - Timeline 4 hàng × 2 học kỳ, mỗi kỳ 6 tháng, một ô cho mỗi ngày.
 - Đổi năm và tháng nhập học; tự xử lý năm nhuận và ranh giới học kỳ.
-- Tạo/sửa/xóa mục tiêu, lĩnh vực, ghi chú, deadline và tiến độ 0–100%.
+- Tạo/sửa/xóa mục tiêu với màu tùy chọn; chọn theo tiến độ 0–100% hoặc cột mốc đạt/chưa đạt.
+- Màu gợi ý và ký hiệu riêng cho thi giữa kỳ (G), cuối kỳ (C), cột mốc (◆), thành tựu đã đạt (★).
+- Ngày có nhiều mục tiêu chia ô chéo cho hai mục tiêu, chia góc cho 3–4; trên 4 có dấu chấm và danh sách đầy đủ khi mở ngày.
+- Timeline có chế độ màu mục tiêu và chế độ năng suất theo thời lượng; lọc theo mục tiêu.
 - Lưu lịch sử tiến độ và ngày hoàn thành trong cùng transaction với mục tiêu.
-- Nhật ký hoạt động, chi tiết theo ngày, lọc mục tiêu và tìm kiếm.
+- Nhật ký hoạt động gắn với mục tiêu, nhập thời lượng theo phút, ghi nhận cột mốc độc lập và màu riêng.
+- Báo cáo tuần/tháng: tổng thời gian, số ngày duy trì, biểu đồ từng ngày và tỷ lệ phân bổ thời gian cho từng mục tiêu.
 - Chuỗi ngày hoạt động, cảnh báo deadline/quá hạn và xuất dữ liệu JSON.
-- Đăng ký, đăng nhập, đăng xuất và khôi phục mật khẩu bằng Supabase Auth.
+- Đăng ký, đăng nhập, đăng xuất bằng Supabase Auth; nút hiện/ẩn mật khẩu. Khôi phục qua email có thể bật sau khi cấu hình SMTP.
 - Dữ liệu riêng theo tài khoản, RLS trên toàn bộ bảng; dữ liệu demo chỉ để xem.
 - Giao diện responsive và hộp thoại hỗ trợ bàn phím.
 
@@ -31,6 +35,7 @@ Các biến môi trường:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `NEXT_PUBLIC_AUTH_EMAIL_ENABLED` (mặc định `false`; chỉ bật `true` sau khi cấu hình email để hiện chức năng quên mật khẩu)
 
 Chỉ dùng publishable key ở client. Không đưa service role, secret key hoặc token triển khai vào Git.
 
@@ -42,14 +47,17 @@ RLS dùng `auth.uid()` kiểm tra sở hữu cho đọc/ghi; khóa ngoại tổn
 
 Các ngày là kiểu `date`; ngày ghi tiến độ tự động dùng múi giờ `Asia/Ho_Chi_Minh`. Ngày hoàn thành có thể nhập lại để ghi nhận một cột mốc trước đó. Khi mở lại rồi hoàn thành một mục tiêu, lịch sử các lần trước vẫn được giữ.
 
+Thống kê năng suất chỉ dùng nhật ký `event`, không đếm lịch sử cập nhật phần trăm hoặc hoàn thành tự động. Cột mốc độc lập không có thời lượng cũng không tính vào độ đều đặn. Hoạt động thông thường chưa nhập thời lượng được tính là một ngày duy trì nhưng không được suy ra số phút. Tuần bắt đầu thứ Hai; mẫu số của kỳ hiện tại chỉ tính những ngày đã qua. Màu nhạt biểu thị hoạt động, màu đậm và viền biểu thị deadline; nhiều mục tiêu cùng ngày vẫn có thể đọc đầy đủ qua nhãn và chi tiết ngày.
+
 ## Supabase Auth cho production
 
 Trong Dashboard → Authentication:
 
 1. URL Configuration: đặt Site URL là `https://uni-tracker-sigma.vercel.app`; thêm URL production và `http://localhost:3000` vào Redirect URLs.
 2. Bật Email provider và cho phép đăng ký.
-3. Để email xác nhận và email đặt lại mật khẩu gửi tới mọi người dùng, cấu hình SMTP riêng. Dịch vụ email mặc định của Supabase giới hạn người nhận và lưu lượng, không dành cho ứng dụng public.
-4. Giữ xác nhận email nếu cần xác minh quyền sở hữu email. Nếu chủ dự án chọn tắt xác nhận email, đăng ký có thể sử dụng ngay; chức năng quên mật khẩu vẫn cần SMTP.
+3. Cấu hình tạm hiện tại: tắt Custom SMTP và Confirm email. Người dùng đăng ký bằng email/mật khẩu và nhận session ngay; chưa xác minh chủ email.
+4. Khôi phục mật khẩu qua email đang ẩn (`NEXT_PUBLIC_AUTH_EMAIL_ENABLED=false`). Khi có SMTP gửi được email tới mọi người dùng, bật cờ này và bật lại Confirm email nếu cần. Dịch vụ email mặc định Supabase giới hạn người nhận và lưu lượng.
+5. Với Resend: host `smtp.resend.com`, port `465`, username `resend`, password là Resend API key, sender thuộc domain đã xác minh. URL Vercel chỉ dùng cho Site URL/redirect, không phải SMTP host.
 
 ## Vercel và GitHub
 
@@ -69,7 +77,11 @@ npm run build
 
 `tests/timeline.test.ts` kiểm tra 8 học kỳ, ngày nhuận, đủ ngày không trùng, tháng nhập học, padding theo thứ và chuỗi ngày.
 
+`tests/focus.test.ts` kiểm tra chia màu khi trùng deadline, giữ mọi cột mốc, biên tuần/tháng, thống kê thời gian và loại trừ lịch sử tự động. `tests/errors.test.ts` kiểm tra thông báo đăng nhập và gửi email.
+
 `tests/database.sql` chạy trong transaction rồi ROLLBACK: kiểm tra RLS với hai người dùng, chống đổi chủ sở hữu, chống khóa ngoại chéo tài khoản, lịch sử hoàn thành nguyên tử, chống trùng khi sửa tên, giữ lịch sử khi xóa mục tiêu, và chặn truy cập ẩn danh. Chạy bằng SQL Editor hoặc công cụ có quyền quản trị trên database kiểm thử.
+
+`tests/focus-database.sql` cũng rollback toàn bộ: kiểm tra ràng buộc cột mốc, màu, thời lượng, hoàn thành có metadata, gỡ liên kết và giữ màu/tên mục tiêu đã xóa.
 
 ## Giới hạn chủ ý
 

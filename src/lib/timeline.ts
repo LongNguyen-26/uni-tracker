@@ -10,6 +10,9 @@ export type Goal = {
   title: string;
   description: string;
   category: string;
+  color: string;
+  tracking_mode: "progress" | "milestone";
+  milestone_kind: MilestoneKind;
   deadline: string;
   progress: number;
   completed_on: string | null;
@@ -23,7 +26,58 @@ export type Activity = {
   notes: string;
   occurred_on: string;
   kind: "event" | "progress" | "completion";
+  duration_minutes: number;
+  color: string;
+  is_milestone: boolean;
+  milestone_kind: MilestoneKind;
+  goal_title: string;
   created_at: string;
+};
+export type MilestoneKind = "general" | "midterm" | "final" | "achievement";
+export type GoalInput = Pick<
+  Goal,
+  | "title"
+  | "description"
+  | "category"
+  | "deadline"
+  | "progress"
+  | "completed_on"
+  | "color"
+  | "tracking_mode"
+  | "milestone_kind"
+>;
+export type ActivityInput = Pick<
+  Activity,
+  | "title"
+  | "notes"
+  | "occurred_on"
+  | "goal_id"
+  | "duration_minutes"
+  | "color"
+  | "is_milestone"
+  | "milestone_kind"
+>;
+export const GOAL_COLORS = [
+  "#2563eb",
+  "#7c3aed",
+  "#0d9488",
+  "#ea580c",
+  "#db2777",
+  "#dc2626",
+  "#ca8a04",
+  "#237a4b",
+];
+export const MILESTONE_LABELS: Record<MilestoneKind, string> = {
+  general: "Cột mốc",
+  midterm: "Thi giữa kỳ",
+  final: "Thi cuối kỳ",
+  achievement: "Thành tựu",
+};
+export const MILESTONE_COLORS: Record<MilestoneKind, string> = {
+  general: "#7c3aed",
+  midterm: "#ea580c",
+  final: "#dc2626",
+  achievement: "#ca8a04",
 };
 export type Semester = {
   index: number;
@@ -141,6 +195,9 @@ export function demoData(today: string): {
     user_id: "demo",
     title,
     category,
+    color: GOAL_COLORS[Number(id.slice(1)) % GOAL_COLORS.length],
+    tracking_mode: "progress",
+    milestone_kind: "general",
     progress,
     deadline: addDays(today, offset),
     description: "",
@@ -150,9 +207,32 @@ export function demoData(today: string): {
   const goals = [
     goal("g1", "Hoàn thành portfolio cá nhân", "Dự án", 75, 5),
     goal("g2", "Chinh phục IELTS 7.0", "Ngoại ngữ", 60, 24),
-    goal("g3", "Học 100 bài cấu trúc dữ liệu", "Học tập", 42, 45),
-    goal("g4", "Tham gia một cuộc thi hackathon", "Trải nghiệm", 100, -3),
+    goal("g3", "Viết paper nghiên cứu đầu tiên", "Học tập", 42, 45),
+    {
+      ...goal("g4", "Có giải tại Hackathon", "Trải nghiệm", 100, -3),
+      tracking_mode: "milestone" as const,
+      milestone_kind: "achievement" as const,
+      color: "#ca8a04",
+    },
     goal("g5", "Hoàn thành khóa Git & GitHub", "Kỹ năng", 100, -8),
+    {
+      ...goal("g6", "Thi giữa kỳ · Xác suất thống kê", "Học tập", 0, 5),
+      tracking_mode: "milestone" as const,
+      milestone_kind: "midterm" as const,
+      color: "#ea580c",
+    },
+    {
+      ...goal("g7", "Thi cuối kỳ · Cấu trúc dữ liệu", "Học tập", 0, 24),
+      tracking_mode: "milestone" as const,
+      milestone_kind: "final" as const,
+      color: "#dc2626",
+    },
+    {
+      ...goal("g8", "GPA học kỳ đạt 3.5+", "Học tập", 0, 60),
+      tracking_mode: "milestone" as const,
+      milestone_kind: "general" as const,
+      color: "#db2777",
+    },
   ];
   const activities: Activity[] = [];
   const first = buildSemesters(profile.start_year, 9)[0].start;
@@ -162,16 +242,24 @@ export function demoData(today: string): {
       activities.push({
         id: `demo-${i}-${j}`,
         user_id: "demo",
-        goal_id: null,
+        goal_id: ["g2", "g3", "g1", null][j],
         title: [
-          "Ôn tập kiến thức chuyên ngành",
-          "Luyện nghe tiếng Anh",
-          "Thực hành bài tập lập trình",
+          "Luyện IELTS Listening & Reading",
+          "Đọc tài liệu và viết bản nháp paper",
+          "Xây dựng dự án portfolio",
           "Đọc sách và ghi chú",
         ][j],
         notes: "",
         occurred_on: addDays(first, i),
         kind: "event",
+        duration_minutes: [45, 90, 60, 20][j],
+        color:
+          goals.find((g) => g.id === ["g2", "g3", "g1", null][j])?.color ||
+          "#237a4b",
+        goal_title:
+          goals.find((g) => g.id === ["g2", "g3", "g1", null][j])?.title || "",
+        is_milestone: false,
+        milestone_kind: "general",
         created_at: `${addDays(first, i)}T08:00:00Z`,
       });
   }
@@ -186,6 +274,11 @@ export function demoData(today: string): {
         notes: "",
         occurred_on: g.completed_on!,
         kind: "completion",
+        duration_minutes: 0,
+        color: g.color,
+        goal_title: g.title,
+        is_milestone: true,
+        milestone_kind: g.milestone_kind,
         created_at: `${g.completed_on}T10:00:00Z`,
       }),
     );
