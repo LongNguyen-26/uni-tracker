@@ -45,3 +45,4 @@ next-env.d.ts
 /.verification-account.json
 .vercel
 .env*
+!/.env.example
