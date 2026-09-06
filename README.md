@@ -2,6 +2,8 @@
 
 Ứng dụng tiếng Việt theo dõi hành trình đại học 4 năm, xây bằng Next.js, TypeScript và Supabase, triển khai trên Vercel.
 
+Website: https://uni-tracker-sigma.vercel.app
+
 ## Tính năng
 
 - Timeline 4 hàng × 2 học kỳ, mỗi kỳ 6 tháng, một ô cho mỗi ngày.
@@ -44,7 +46,7 @@ Các ngày là kiểu `date`; ngày ghi tiến độ tự động dùng múi gi�
 
 Trong Dashboard → Authentication:
 
-1. URL Configuration: đặt Site URL là URL production Vercel; thêm URL production và `http://localhost:3000` vào Redirect URLs.
+1. URL Configuration: đặt Site URL là `https://uni-tracker-sigma.vercel.app`; thêm URL production và `http://localhost:3000` vào Redirect URLs.
 2. Bật Email provider và cho phép đăng ký.
 3. Để email xác nhận và email đặt lại mật khẩu gửi tới mọi người dùng, cấu hình SMTP riêng. Dịch vụ email mặc định của Supabase giới hạn người nhận và lưu lượng, không dành cho ứng dụng public.
 4. Giữ xác nhận email nếu cần xác minh quyền sở hữu email. Nếu chủ dự án chọn tắt xác nhận email, đăng ký có thể sử dụng ngay; chức năng quên mật khẩu vẫn cần SMTP.
@@ -74,3 +76,4 @@ npm run build
 - Deadline hiển thị trong ứng dụng; chưa gửi email/push nhắc việc.
 - Người khác dùng tài khoản riêng; chưa có chia sẻ công khai hành trình cá nhân.
 - Một hành trình 4 năm cho mỗi tài khoản. Các bản ghi ngoài khoảng này vẫn nằm trong mục tiêu/nhật ký, nhưng không xuất hiện trên heatmap.
+
