@@ -1,0 +1,5 @@
+tests/
+supabase/
+README.md
+.env*
+.verification-account.json
