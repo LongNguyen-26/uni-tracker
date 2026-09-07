@@ -19,10 +19,13 @@ export type DaySummary = {
 };
 export const isWork = (a: Activity) =>
   a.kind === "event" && (!a.is_milestone || a.duration_minutes > 0);
-export const formatMinutes = (minutes: number) =>
-  minutes < 60
-    ? `${minutes} phút`
-    : `${Math.floor(minutes / 60)} giờ${minutes % 60 ? ` ${minutes % 60} phút` : ""}`;
+export const formatMinutes = (minutes: number) => {
+  const seconds = Math.max(0, Math.round(Number(minutes) * 60)),
+    m = Math.floor(seconds / 60),
+    h = Math.floor(m / 60);
+  if (seconds < 60) return seconds ? `${seconds} giây` : "0 phút";
+  return `${h ? `${h} giờ ` : ""}${m % 60 || !h ? `${m % 60} phút` : ""}${seconds % 60 ? ` ${seconds % 60} giây` : ""}`.trim();
+};
 export const activityLabel = (a: Activity) =>
   a.kind === "completion"
     ? "Hoàn thành mục tiêu"

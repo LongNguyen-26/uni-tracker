@@ -1,0 +1,8 @@
+{
+  "goals": [
+    {"id":"ielts","title":"IELTS 7.0","starts_on":"2026-09-07","deadline":"2026-12-20","tracking_mode":"numeric","metric_current":6.5,"metric_target":7,"metric_unit":"band","color":"#2563eb","category":"Ngoại ngữ"},
+    {"id":"paper","title":"Nộp Paper","starts_on":"2026-09-07","deadline":"2027-03-15","tracking_mode":"checklist","color":"#7c3aed","category":"Dự án","checklist":[{"id":"outline","title":"Đề cương","done":false},{"id":"experiment","title":"Thực nghiệm","done":false},{"id":"write","title":"Viết bản thảo","done":false},{"id":"submit","title":"Nộp Paper","done":false}]}
+  ],
+  "sessions": [{"title":"Luyện Reading","goal_id":"ielts","scheduled_start":"2026-09-07T19:00:00+07:00","scheduled_end":"2026-09-07T20:00:00+07:00"}],
+  "budgets":[{"goal_id":"paper","week_start":"2026-09-07","planned_minutes":720}]
+}

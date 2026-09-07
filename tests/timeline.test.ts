@@ -14,20 +14,20 @@ test("eight semesters contain every day once including leap day", () => {
   assert.equal(semesters.length, 8);
   assert.equal(semesters[0].start, "2023-09-01");
   assert.equal(semesters[7].end, "2027-08-31");
-  const days = semesters.flatMap((s) => s.days.filter(Boolean));
+  const days = semesters.flatMap((s) => s.days.filter((d) => d && d >= s.start && d <= s.end));
   assert.equal(days.length, 1461);
   assert.equal(new Set(days).size, 1461);
   assert.ok(days.includes("2024-02-29"));
   semesters.forEach((s, i) => {
     assert.equal(s.days.length % 7, 0);
-    assert.equal(s.months.length, 6);
+    assert.ok(s.months.length >= 6);
     if (i > 0) assert.equal(s.start, addDays(semesters[i - 1].end, 1));
   });
 });
 test("custom start months cross year boundaries without gaps", () => {
   for (let month = 1; month <= 12; month++) {
     const semesters = buildSemesters(2024, month);
-    const days = semesters.flatMap((s) => s.days.filter(Boolean));
+    const days = semesters.flatMap((s) => s.days.filter((d) => d && d >= s.start && d <= s.end));
     assert.equal(new Set(days).size, days.length);
     assert.equal(
       days.length,
@@ -41,7 +41,7 @@ test("custom start months cross year boundaries without gaps", () => {
 });
 test("calendar starts on Monday and padding matches weekday", () => {
   const sem = buildSemesters(2024, 9)[0];
-  assert.deepEqual(sem.days.slice(0, 6), Array(6).fill(null));
+  assert.equal(sem.days[0], "2024-08-26");
   assert.equal(sem.days[6], "2024-09-01");
   assert.equal(sem.days[7], "2024-09-02");
 });

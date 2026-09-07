@@ -2,26 +2,26 @@
 import { useId, useState, type FormEvent } from "react";
 import { ArrowRight, Eye, EyeOff, LoaderCircle } from "lucide-react";
 import Dialog from "./dialog";
+import DatePicker from "./date-picker";
+import { localDateTime } from "@/lib/planning";
 import { getSupabase } from "@/lib/supabase";
 import { errorMessage } from "@/lib/errors";
 export { errorMessage } from "@/lib/errors";
 import {
-  CATEGORIES,
   GOAL_COLORS,
   MILESTONE_COLORS,
   MILESTONE_LABELS,
   todayKey,
+  addDays,
   type MilestoneKind,
-  type GoalInput,
   type ActivityInput,
   type Goal,
   type Activity,
-  type Profile,
 } from "@/lib/timeline";
 
 const authEmailEnabled = process.env.NEXT_PUBLIC_AUTH_EMAIL_ENABLED === "true";
 
-function ColorPicker({
+export function ColorPicker({
   color,
   onChange,
 }: {
@@ -57,7 +57,7 @@ function ColorPicker({
     </fieldset>
   );
 }
-function MilestoneSelect({
+export function MilestoneSelect({
   value,
   onChange,
 }: {
@@ -301,204 +301,6 @@ export function AuthForm({
   );
 }
 
-export function GoalForm({
-  goal,
-  defaultDate,
-  onClose,
-  onSave,
-}: {
-  goal?: Goal;
-  defaultDate: string;
-  onClose: () => void;
-  onSave: (data: GoalInput, id?: string) => Promise<void>;
-}) {
-  const [progress, setProgress] = useState(goal?.progress || 0);
-  const [trackingMode, setTrackingMode] = useState<Goal["tracking_mode"]>(
-    goal?.tracking_mode || "progress",
-  );
-  const [milestoneKind, setMilestoneKind] = useState<MilestoneKind>(
-    goal?.milestone_kind || "general",
-  );
-  const [color, setColor] = useState(goal?.color || GOAL_COLORS[0]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  async function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const data = new FormData(e.currentTarget);
-    setBusy(true);
-    setError("");
-    try {
-      const title = String(data.get("title")).trim();
-      if (!title) throw new Error("Hãy nhập tên mục tiêu.");
-      await onSave(
-        {
-          title,
-          description: String(data.get("description")).trim(),
-          category: String(data.get("category")),
-          deadline: String(data.get("deadline")),
-          progress,
-          color,
-          tracking_mode: trackingMode,
-          milestone_kind:
-            trackingMode === "milestone" ? milestoneKind : "general",
-          completed_on:
-            progress === 100 ? String(data.get("completed_on")) : null,
-        },
-        goal?.id,
-      );
-      onClose();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Dialog
-      title={goal ? "Cập nhật mục tiêu" : "Một mục tiêu mới"}
-      description="Mỗi bước nhỏ đều đưa bạn tiến về phía trước."
-      onClose={() => {
-        if (!busy) onClose();
-      }}
-    >
-      <form className="form" onSubmit={submit}>
-        <label>
-          Tên mục tiêu
-          <input
-            name="title"
-            defaultValue={goal?.title}
-            placeholder="Bạn muốn đạt được điều gì?"
-            required
-            maxLength={160}
-          />
-        </label>
-        <fieldset className="tracking-choice">
-          <legend>Cách theo dõi</legend>
-          <div>
-            {(
-              [
-                ["progress", "Theo tiến độ", "IELTS, viết Paper, dự án…"],
-                ["milestone", "Một cột mốc", "GPA, thi GK/CK, giải thưởng…"],
-              ] as const
-            ).map(([mode, label, hint]) => (
-              <button
-                type="button"
-                key={mode}
-                className={trackingMode === mode ? "selected" : ""}
-                aria-pressed={trackingMode === mode}
-                onClick={() => {
-                  setTrackingMode(mode);
-                  if (mode === "milestone") {
-                    setProgress(progress === 100 ? 100 : 0);
-                    setColor(MILESTONE_COLORS[milestoneKind]);
-                  }
-                }}
-              >
-                <strong>{label}</strong>
-                <span>{hint}</span>
-              </button>
-            ))}
-          </div>
-        </fieldset>
-        {trackingMode === "milestone" && (
-          <MilestoneSelect
-            value={milestoneKind}
-            onChange={(kind) => {
-              setMilestoneKind(kind);
-              setColor(MILESTONE_COLORS[kind]);
-            }}
-          />
-        )}
-        <ColorPicker color={color} onChange={setColor} />
-        <div className="form-row">
-          <label>
-            Lĩnh vực
-            <select
-              name="category"
-              defaultValue={goal?.category || CATEGORIES[0]}
-            >
-              {CATEGORIES.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Hạn hoàn thành
-            <input
-              name="deadline"
-              type="date"
-              required
-              defaultValue={goal?.deadline || defaultDate}
-            />
-          </label>
-        </div>
-        <label>
-          Ghi chú
-          <textarea
-            name="description"
-            defaultValue={goal?.description}
-            placeholder="Kế hoạch, các bước thực hiện…"
-            rows={3}
-            maxLength={4000}
-          />
-        </label>
-        {trackingMode === "progress" ? (
-          <label className="range-label">
-            <span>
-              Tiến độ hiện tại <strong>{progress}%</strong>
-            </span>
-            <input
-              aria-label="Tiến độ hiện tại"
-              type="range"
-              min={0}
-              max={100}
-              value={progress}
-              onChange={(e) => setProgress(Number(e.target.value))}
-            />
-          </label>
-        ) : (
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={progress === 100}
-              onChange={(e) => setProgress(e.target.checked ? 100 : 0)}
-            />
-            Đã đạt cột mốc này
-          </label>
-        )}
-        {progress === 100 && (
-          <label>
-            Ngày hoàn thành
-            <input
-              name="completed_on"
-              type="date"
-              defaultValue={goal?.completed_on || todayKey()}
-              max={todayKey()}
-              required
-            />
-          </label>
-        )}
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        )}
-        <div className="form-actions">
-          <button
-            type="button"
-            className="button"
-            onClick={onClose}
-            disabled={busy}
-          >
-            Hủy
-          </button>
-          <Submit busy={busy}>Lưu mục tiêu</Submit>
-        </div>
-      </form>
-    </Dialog>
-  );
-}
-
 export function ActivityForm({
   activity,
   goals,
@@ -512,6 +314,13 @@ export function ActivityForm({
   onClose: () => void;
   onSave: (data: ActivityInput, id?: string) => Promise<void>;
 }) {
+  const [day, setDay] = useState(activity?.occurred_on || defaultDate);
+  const [start, setStart] = useState(
+    activity?.started_at ? localDateTime(activity.started_at, true) : "",
+  );
+  const [end, setEnd] = useState(
+    activity?.ended_at ? localDateTime(activity.ended_at, true) : "",
+  );
   const [goalId, setGoalId] = useState(activity?.goal_id || "");
   const [color, setColor] = useState(activity?.color || GOAL_COLORS[0]);
   const [isMilestone, setIsMilestone] = useState(
@@ -530,14 +339,52 @@ export function ActivityForm({
     try {
       const title = String(data.get("title")).trim();
       if (!title) throw new Error("Hãy nhập tên hoạt động.");
+      if (
+        (start && !end) ||
+        (!start && end) ||
+        (start &&
+          (end <= start ||
+            start.slice(0, 10) !== day ||
+            (end.slice(0, 10) !== day &&
+              end !== `${addDays(day, 1)}T00:00:00`)))
+      )
+        throw new Error(
+          "Giờ bắt đầu và kết thúc cần nằm trong ngày ghi nhận, kết thúc sau bắt đầu.",
+        );
+      const duration =
+        activity && activity.kind !== "event"
+          ? 0
+          : Number(data.get("duration_minutes") || 0) +
+            Number(data.get("duration_seconds") || 0) / 60;
+      if (
+        duration > 1440 ||
+        (start &&
+          duration * 60000 >
+            new Date(end).getTime() - new Date(start).getTime() + 1000)
+      )
+        throw new Error(
+          "Thời gian thực làm không thể dài hơn khoảng giờ đã nhập.",
+        );
       await onSave(
         {
           title,
+          started_at: start
+            ? activity?.started_at &&
+              start === localDateTime(activity.started_at, true)
+              ? activity.started_at
+              : new Date(start).toISOString()
+            : null,
+          ended_at: end
+            ? activity?.ended_at &&
+              end === localDateTime(activity.ended_at, true)
+              ? activity.ended_at
+              : new Date(end).toISOString()
+            : null,
           notes: String(data.get("notes")).trim(),
-          occurred_on: String(data.get("occurred_on")),
+          occurred_on: day,
           goal_id: goalId || null,
           color,
-          duration_minutes: Number(data.get("duration_minutes") || 0),
+          duration_minutes: duration,
           is_milestone: isMilestone,
           milestone_kind: isMilestone ? milestoneKind : "general",
         },
@@ -559,6 +406,13 @@ export function ActivityForm({
       }}
     >
       <form className="form" onSubmit={submit}>
+        {activity && activity.kind !== "event" && (
+          <p className="muted small">
+            Đây là lịch sử cập nhật mục tiêu. Bạn có thể sửa nội dung ghi nhận;
+            mức hiện tại được chỉnh trong mục tiêu tương ứng. Bản ghi này không
+            cộng vào giờ làm việc.
+          </p>
+        )}
         <label>
           Hoạt động đã hoàn thành
           <input
@@ -593,32 +447,68 @@ export function ActivityForm({
           </p>
         )}
         <div className="form-row">
-          <label>
-            Ngày diễn ra
-            <input
-              name="occurred_on"
-              type="date"
-              required
-              max={todayKey()}
-              defaultValue={activity?.occurred_on || defaultDate}
-            />
-          </label>
+          <DatePicker
+            label="Ngày diễn ra"
+            value={day}
+            onChange={setDay}
+            max={todayKey()}
+          />
           <label>
             Thời lượng (phút)
             <input
               type="number"
               name="duration_minutes"
+              disabled={Boolean(activity && activity.kind !== "event")}
               min={0}
               max={1440}
-              step={1}
-              defaultValue={activity?.duration_minutes || ""}
+              step="any"
+              defaultValue={
+                activity?.duration_minutes
+                  ? Math.floor(Math.round(activity.duration_minutes * 60) / 60)
+                  : ""
+              }
               placeholder="Ví dụ: 60"
+            />
+          </label>
+          <label>
+            Giây lẻ
+            <input
+              type="number"
+              name="duration_seconds"
+              min={0}
+              max={59}
+              step={1}
+              defaultValue={
+                Math.round((activity?.duration_minutes || 0) * 60) % 60
+              }
+              disabled={Boolean(activity && activity.kind !== "event")}
+            />
+          </label>
+        </div>
+        <div className="form-row">
+          <label>
+            Bắt đầu thực tế (tùy chọn)
+            <input
+              type="datetime-local"
+              step={1}
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+            />
+          </label>
+          <label>
+            Kết thúc thực tế
+            <input
+              type="datetime-local"
+              step={1}
+              value={end}
+              onChange={(e) => setEnd(e.target.value)}
             />
           </label>
         </div>
         <p className="muted small">
           Nhập thời gian thực tế đã dành cho việc này. Để trống nếu chỉ muốn ghi
-          chú.
+          chú. Thời lượng là số phút thực sự làm việc, không tính thời gian nghỉ
+          giữa hai mốc giờ.
         </p>
         <label className="checkbox-label">
           <input
@@ -675,94 +565,6 @@ export function ActivityForm({
           </button>
           <Submit busy={busy}>Lưu hoạt động</Submit>
         </div>
-      </form>
-    </Dialog>
-  );
-}
-
-export function SettingsForm({
-  profile,
-  onClose,
-  onSave,
-}: {
-  profile: Profile;
-  onClose: () => void;
-  onSave: (data: Profile) => Promise<void>;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  async function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const data = new FormData(e.currentTarget);
-    setBusy(true);
-    setError("");
-    try {
-      const name = String(data.get("display_name")).trim();
-      if (!name) throw new Error("Hãy nhập tên của bạn.");
-      await onSave({
-        ...profile,
-        display_name: name,
-        start_year: Number(data.get("start_year")),
-        start_month: Number(data.get("start_month")),
-      });
-      onClose();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Dialog
-      title="Hành trình của bạn"
-      description="Timeline gồm 4 năm, mỗi năm 2 học kỳ liên tiếp, mỗi kỳ 6 tháng."
-      onClose={() => {
-        if (!busy) onClose();
-      }}
-    >
-      <form className="form" onSubmit={submit}>
-        <label>
-          Tên hiển thị
-          <input
-            name="display_name"
-            required
-            maxLength={80}
-            defaultValue={profile.display_name}
-          />
-        </label>
-        <div className="form-row">
-          <label>
-            Năm nhập học
-            <input
-              type="number"
-              name="start_year"
-              min={2000}
-              max={2100}
-              required
-              defaultValue={profile.start_year}
-            />
-          </label>
-          <label>
-            Tháng bắt đầu
-            <select name="start_month" defaultValue={profile.start_month}>
-              {Array.from({ length: 12 }, (_, i) => (
-                <option value={i + 1} key={i}>
-                  Tháng {i + 1}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <p className="muted small">
-          Đổi mốc nhập học sẽ sắp xếp lại timeline. Mục tiêu và nhật ký đã lưu
-          vẫn được giữ nguyên.
-        </p>
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        )}
-        <Submit busy={busy}>Lưu thay đổi</Submit>
       </form>
     </Dialog>
   );
