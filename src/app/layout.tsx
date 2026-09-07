@@ -3,6 +3,7 @@ import { Be_Vietnam_Pro } from "next/font/google";
 import "./globals.css";
 import "./focus.css";
 import "./planning.css";
+import "./schedule.css";
 
 const vietnam = Be_Vietnam_Pro({
   variable: "--font-vietnam",

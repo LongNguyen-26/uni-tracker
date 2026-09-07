@@ -1,0 +1,370 @@
+.heatmap-scroll {
+  overflow: visible;
+  padding: 3px 0;
+}
+.heatmap-inner,
+.zoomed .heatmap-inner {
+  min-width: 0 !important;
+  width: 100%;
+}
+.heatmap {
+  gap: 2px;
+}
+.day-slot {
+  aspect-ratio: 1;
+  min-width: 0;
+  display: grid;
+  position: relative;
+  padding: 1px;
+}
+.day-slot.range-day {
+  box-shadow: 0 3px 0 var(--range-color, transparent);
+}
+.day-slot.uncertain-range {
+  outline: 1px dashed #8888;
+  outline-offset: -1px;
+}
+.day-cell.has-plan {
+  border: 1px dashed #536579;
+}
+.day-cell {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1;
+  min-height: 0;
+}
+.day-cell:hover {
+  transform: none;
+}
+.deadline-corner {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 55%;
+  height: 55%;
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+  z-index: 1;
+}
+.month-labels {
+  gap: 2px;
+  font-size: 9px;
+}
+.month-labels span {
+  max-width: 50px;
+}
+.range-caption {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 6px 0;
+  line-height: 1.5;
+}
+.range-caption i {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+}
+.heatmap-legend {
+  flex-wrap: wrap;
+}
+.legend-planned {
+  border: 1px dashed #64748b;
+  background: #64748b22;
+}
+.journey-strip {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+.journey-strip button {
+  font-size: 10px;
+  background: #edf0eb;
+  border: 0;
+  border-radius: 4px;
+  padding: 7px;
+  color: #677261;
+}
+.journey-strip .selected {
+  background: #dfe7f5;
+  color: #2563eb;
+}
+.term-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: #fff7dc;
+  border-radius: 8px;
+  margin: 12px 0;
+  font-size: 12px;
+}
+.term-confirm small {
+  display: block;
+  color: #7c7154;
+  margin-top: 4px;
+}
+.day-session-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: 1px dashed #94a3b8;
+  border-radius: 7px;
+  background: #f5f7fa;
+  padding: 12px;
+  margin: 8px 0;
+}
+.day-session-button small {
+  display: block;
+  margin-top: 5px;
+}
+.today-focus-bar {
+  position: fixed;
+  z-index: 35;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-40%);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 14px;
+  border: 1px solid #dce4d7;
+  box-shadow: 0 4px 20px #1232;
+  background: #fffffff5;
+  border-radius: 12px;
+  font-size: 12px;
+  max-width: calc(100vw - 28px);
+}
+.today-focus-bar .button {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.timer-chip {
+  bottom: 90px;
+}
+.page-footer {
+  padding-bottom: 100px;
+}
+.timetable-section {
+  margin: 24px 0;
+}
+.capacity-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0 18px;
+}
+.capacity-line > span {
+  font-size: 11px;
+  background: #fff;
+  border: 1px solid #e2e8dd;
+  padding: 10px;
+  border-radius: 7px;
+}
+.capacity-line b {
+  display: block;
+  font-size: 15px;
+  margin-top: 5px;
+}
+.week-board {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(90px, 1fr));
+  gap: 7px;
+  overflow-x: auto;
+  border: 1px solid #e2e8dd;
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px;
+  margin: 15px 0;
+}
+.week-day {
+  min-height: 200px;
+}
+.week-day h3 {
+  font-size: 12px;
+  text-align: center;
+  margin: 0 0 12px;
+}
+.week-day h3 small {
+  display: block;
+  font-weight: 400;
+  color: #819075;
+  margin-top: 4px;
+}
+.week-day.current h3 {
+  color: #2563eb;
+}
+.week-day-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.class-block,
+.week-session {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  padding: 10px 7px;
+  border-radius: 6px;
+  gap: 5px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.class-block {
+  background: repeating-linear-gradient(
+    135deg,
+    #f2f3f5,
+    #f2f3f5 5px,
+    #e9ecef 5px,
+    #e9ecef 6px
+  );
+  color: #7b8490;
+  border: 1px solid #e2e4e7;
+}
+.class-block .icon-button {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 22px;
+  height: 22px;
+}
+.class-block strong {
+  font-size: 11px;
+}
+.class-block span {
+  padding-right: 15px;
+}
+.week-session {
+  color: #344155;
+  min-height: 70px;
+  border: 1px dashed var(--goal-color);
+  background: color-mix(in srgb, var(--goal-color) 8%, white);
+}
+.week-session.done {
+  border-style: solid;
+  background: color-mix(in srgb, var(--goal-color) 55%, white);
+}
+.week-session span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.capacity-highlight {
+  padding: 15px;
+  border-radius: 8px;
+  background: #edf2e8;
+  font-size: 15px;
+}
+.plan-preview {
+  max-height: 260px;
+  overflow-y: auto;
+}
+.plan-preview > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid #e8ece4;
+  font-size: 12px;
+}
+.timetable-section > .section-heading {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.timetable-section h2 {
+  margin-bottom: 7px;
+}
+.row-actions {
+  flex-wrap: wrap;
+}
+.zoomed .heatmap {
+  gap: 3px;
+}
+.zoomed .day-cell {
+  border-radius: 3px;
+  min-height: 0;
+}
+.zoomed .heatmap-body {
+  gap: 6px;
+}
+.day-cell.has-marker span {
+  font-size: clamp(5px, 1vw, 13px);
+}
+@media (max-width: 700px) {
+  .today-focus-bar {
+    left: 14px;
+    right: 14px;
+    transform: none;
+    bottom: 10px;
+    max-width: none;
+    gap: 8px;
+    justify-content: space-between;
+  }
+  .today-focus-bar span {
+    font-size: 10px;
+  }
+  .today-focus-bar .button {
+    max-width: 65%;
+    white-space: normal;
+  }
+  .timetable-section .section-heading {
+    display: block;
+  }
+  .timetable-section .row-actions {
+    margin-top: 12px;
+  }
+  .week-board {
+    grid-template-columns: repeat(7, 125px);
+  }
+  .heatmap {
+    gap: 1px;
+  }
+  .day-slot {
+    padding: 0.5px;
+  }
+  .month-labels {
+    font-size: 8px;
+    gap: 1px;
+  }
+  .zoomed .heatmap {
+    gap: 1.5px;
+  }
+  .zoomed .weekday-labels {
+    font-size: 8px;
+  }
+}
+
+.day-slot.range-day::before {
+  content: "";
+  position: absolute;
+  inset: -2px 0;
+  background: inherit;
+  z-index: 0;
+}
+.range-day .day-cell {
+  position: relative;
+  z-index: 1;
+  inset: 0;
+  width: 80%;
+  height: 80%;
+  margin: auto;
+}
+.range-day.uncertain-range::before {
+  border-left: 1px dashed #778899aa;
+  border-right: 1px dashed #778899aa;
+}
+.day-slot.uncertain-range {
+  outline: none;
+}
+.week-board .week-session strong {
+  overflow-wrap: anywhere;
+}
+.semester-card {
+  min-width: 0;
+}

@@ -5,6 +5,9 @@ export type Profile = {
   start_month: number;
   study_years: number;
   semester_settings: SemesterSettings[];
+  wake_minutes?: number;
+  sleep_minutes?: number;
+  confirmed_semesters?: number[];
 };
 export type Goal = {
   id: string;
@@ -15,6 +18,8 @@ export type Goal = {
   color: string;
   tracking_mode: "progress" | "milestone" | "numeric" | "checklist";
   starts_on: string | null;
+  timing_mode?: "fixed" | "window" | "flexible";
+  reserved_hours?: number;
   semester_index: number | null;
   metric_current: number;
   metric_target: number;
@@ -64,6 +69,8 @@ export type GoalInput = Pick<
   | "metric_unit"
   | "metric_direction"
   | "checklist"
+  | "timing_mode"
+  | "reserved_hours"
 >;
 export type ActivityInput = Pick<
   Activity,
@@ -90,12 +97,12 @@ export type SemesterSettings = {
 export const GOAL_COLORS = [
   "#2563eb",
   "#7c3aed",
-  "#0d9488",
+  "#0891b2",
   "#ea580c",
   "#db2777",
   "#dc2626",
   "#ca8a04",
-  "#237a4b",
+  "#64748b",
 ];
 export const MILESTONE_LABELS: Record<MilestoneKind, string> = {
   general: "Cột mốc",
@@ -188,11 +195,17 @@ export function buildSemesters(
         date >= startDate &&
         date <= endDate &&
         (date.getDate() === 1 || dateKey(date) === dateKey(startDate))
-      )
-        months.push({
-          label: `Th${date.getMonth() + 1}`,
-          column: Math.floor(days.length / 7) + 1,
-        });
+      ) {
+        const column = Math.floor(days.length / 7) + 1;
+        const previous = months.at(-1);
+        if (previous && column - previous.column < 2) {
+          previous.label += `/${date.getMonth() + 1}`;
+        } else
+          months.push({
+            label: `Th${date.getMonth() + 1}`,
+            column: Math.floor(days.length / 7) + 1,
+          });
+      }
       days.push(dateKey(date));
     }
     return {

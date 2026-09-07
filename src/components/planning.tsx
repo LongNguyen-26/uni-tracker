@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import Dialog from "./dialog";
 import DatePicker from "./date-picker";
+import Timetable from "./timetable";
+import type { TimetableEntry } from "@/lib/schedule";
 import { getSupabase } from "@/lib/supabase";
 import { errorMessage } from "@/lib/errors";
 import {
@@ -74,6 +76,9 @@ export default function PlanningHub({
   onAuth,
   onImport,
   onChanged,
+  onSessionsChange,
+  requestedSession,
+  onCloseRequested,
 }: {
   visible: boolean;
   userId?: string;
@@ -81,11 +86,15 @@ export default function PlanningHub({
   goals: Goal[];
   activities: Activity[];
   onAuth: () => void;
-  onImport: () => void;
+  onImport: (kind?: "timetable") => void;
   onChanged: () => Promise<void>;
+  onSessionsChange: (sessions: FocusSession[]) => void;
+  requestedSession: string | null;
+  onCloseRequested: () => void;
 }) {
   const [sessions, setSessions] = useState<FocusSession[]>([]);
   const [budgets, setBudgets] = useState<WeeklyBudget[]>([]);
+  const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
   const [week, setWeek] = useState(monday(todayKey()));
   const [edit, setEdit] = useState<FocusSession | "new" | null>(null);
   const [timer, setTimer] = useState<string | null>(null);
@@ -95,12 +104,14 @@ export default function PlanningHub({
   const reload = useCallback(async () => {
     if (!userId) return;
     try {
-      const [s, b] = await Promise.all([
+      const [s, b, t] = await Promise.all([
         readAll<FocusSession>("focus_sessions", userId),
         readAll<WeeklyBudget>("weekly_budgets", userId),
+        readAll<TimetableEntry>("timetable_entries", userId),
       ]);
       setSessions(s);
       setBudgets(b);
+      setTimetable(t);
       setError("");
     } catch (e) {
       setError(errorMessage(e));
@@ -108,16 +119,12 @@ export default function PlanningHub({
   }, [userId]);
   useEffect(() => {
     const initial = window.setTimeout(() => void reload(), 0);
-    const handle = () => {
-      if (document.visibilityState === "visible") void reload();
-    };
-    document.addEventListener("visibilitychange", handle);
     return () => {
       clearTimeout(initial);
-      document.removeEventListener("visibilitychange", handle);
     };
   }, [reload, activities]);
-  const selected = sessions.find((s) => s.id === timer),
+  useEffect(() => onSessionsChange(sessions), [sessions, onSessionsChange]);
+  const selected = sessions.find((s) => s.id === (timer || requestedSession)),
     running = sessions.find((s) => s.status === "running");
   async function transition(id: string, action: string, notes?: string) {
     if (!userId) return;
@@ -135,6 +142,7 @@ export default function PlanningHub({
       );
       if (action === "confirm") {
         setTimer(null);
+        onCloseRequested();
         await onChanged();
       }
     } catch (e) {
@@ -192,12 +200,48 @@ export default function PlanningHub({
   }
   return (
     <>
-      {running && !timer && (
-        <button className="timer-chip" onClick={() => setTimer(running.id)}>
-          <Clock3 size={17} />
-          Đang tập trung · {running.title}
-          <Maximize2 size={16} />
-        </button>
+      {userId && !selected && (
+        <div className="today-focus-bar">
+          <span>
+            <strong>Hôm nay</strong> ·{" "}
+            {
+              sessions.filter(
+                (s) =>
+                  localDateTime(s.scheduled_start).slice(0, 10) === todayKey(),
+              ).length
+            }{" "}
+            phiên đã đặt
+          </span>
+          {(() => {
+            const next =
+              running ||
+              sessions.find(
+                (s) =>
+                  localDateTime(s.scheduled_start).slice(0, 10) ===
+                    todayKey() && ["planned", "paused"].includes(s.status),
+              );
+            return next ? (
+              <button
+                className="button primary"
+                disabled={busy}
+                onClick={() => {
+                  setTimer(next.id);
+                  if (next.status !== "running")
+                    void transition(next.id, "start").catch(() => {});
+                }}
+              >
+                <Play size={16} />
+                {next.status === "running"
+                  ? "Mở timer"
+                  : `Bắt đầu · ${next.title}`}
+              </button>
+            ) : (
+              <button className="text-button" onClick={() => setEdit("new")}>
+                Đặt một phiên
+              </button>
+            );
+          })()}
+        </div>
       )}
       {visible && (
         <div className="planning-page">
@@ -211,7 +255,7 @@ export default function PlanningHub({
               </p>
             </div>
             <div className="row-actions">
-              <button className="button secondary" onClick={onImport}>
+              <button className="button secondary" onClick={() => onImport()}>
                 <Upload size={17} />
                 Nhập lịch
               </button>
@@ -278,6 +322,20 @@ export default function PlanningHub({
               </strong>
             </div>
           </div>
+          <Timetable
+            week={week}
+            setWeek={setWeek}
+            profile={profile}
+            userId={userId}
+            entries={timetable}
+            sessions={sessions}
+            goals={goals}
+            budgets={budgets}
+            onImport={() => onImport("timetable")}
+            onAuth={onAuth}
+            onChanged={reload}
+            onSession={setTimer}
+          />
           <div className="planning-columns">
             <section className="planning-card">
               <h2>Quỹ giờ theo mục tiêu</h2>
@@ -477,7 +535,10 @@ export default function PlanningHub({
           session={selected}
           busy={busy}
           error={error}
-          onClose={() => setTimer(null)}
+          onClose={() => {
+            setTimer(null);
+            onCloseRequested();
+          }}
           onAction={(a, n) => transition(selected.id, a, n)}
           onDiscard={async () => {
             setBusy(true);
@@ -508,7 +569,6 @@ export default function PlanningHub({
 function SessionForm({
   session,
   goals,
-  profile,
   onClose,
   onSave,
 }: {
@@ -528,7 +588,6 @@ function SessionForm({
       session ? localDateTime(session.scheduled_end) : `${todayKey()}T10:00`,
     ),
     [weeks, setWeeks] = useState(1),
-    [skip, setSkip] = useState(true),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const ids = useRef<string[]>([]);
@@ -551,12 +610,7 @@ function SessionForm({
         timezone:
           session?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
       };
-      const rows = repeatedSessions(
-        input,
-        weeks,
-        profile.semester_settings,
-        skip,
-      ).map((r, i) => ({
+      const rows = repeatedSessions(input, weeks, [], false).map((r, i) => ({
         ...r,
         id: ids.current[i] || (ids.current[i] = crypto.randomUUID()),
       }));
@@ -609,7 +663,18 @@ function SessionForm({
               type="datetime-local"
               required
               value={start}
-              onChange={(e) => setStart(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                const span =
+                  new Date(end).getTime() - new Date(start).getTime();
+                setStart(next);
+                if (next && Number.isFinite(span) && span > 0)
+                  setEnd(
+                    localDateTime(
+                      new Date(new Date(next).getTime() + span).toISOString(),
+                    ),
+                  );
+              }}
             />
           </label>
           <label>
@@ -654,14 +719,6 @@ function SessionForm({
               )}
               .
             </p>
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={skip}
-                onChange={(e) => setSkip(e.target.checked)}
-              />
-              Bỏ qua các kỳ nghỉ đã cài đặt
-            </label>
           </>
         )}
         <label>

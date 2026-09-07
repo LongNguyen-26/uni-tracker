@@ -30,7 +30,6 @@ import {
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import {
-  buildSemesters,
   CATEGORIES,
   MILESTONE_LABELS,
   daysBetween,
@@ -51,21 +50,34 @@ import { GoalForm, SettingsForm } from "./journey-forms";
 import PlanningHub from "./planning";
 import dynamic from "next/dynamic";
 const ImportDialog = dynamic(() => import("./import-dialog"));
-import { goalProgressText, goalDateText } from "@/lib/planning";
+import {
+  goalProgressText,
+  goalDateText,
+  localDateTime,
+  type FocusSession,
+} from "@/lib/planning";
+import {
+  journeySemesters,
+  journeySettings,
+  sessionsOnDay,
+  dayVisual,
+  indexSessionsByDay,
+  timingMode,
+  parseCalendarPreset,
+} from "@/lib/schedule";
 import ProductivityPanel from "./productivity";
 import {
   activityLabel,
-  dayBackground,
   formatMinutes,
   isWork,
   summarizeDays,
   type DaySummary,
-  type HeatmapMode,
 } from "@/lib/focus";
 
 type View = "timeline" | "goals" | "journal" | "planning";
 type Modal =
-  | { kind: "auth" | "recovery" | "settings" | "import" }
+  | { kind: "auth" | "recovery" | "settings" }
+  | { kind: "import"; initialKind?: "timetable" }
   | { kind: "goal"; goal?: Goal; date?: string }
   | { kind: "activity"; activity?: Activity; date?: string }
   | { kind: "delete"; table: "goals" | "activities"; id: string; title: string }
@@ -80,7 +92,7 @@ const NAV = [
 function SemesterCard({
   semester,
   summaries,
-  mode,
+  sessions,
   activities,
   goals,
   today,
@@ -91,7 +103,7 @@ function SemesterCard({
 }: {
   semester: Semester;
   summaries: Map<string, DaySummary>;
-  mode: HeatmapMode;
+  sessions: FocusSession[];
   activities: Activity[];
   goals: Goal[];
   today: string;
@@ -101,6 +113,7 @@ function SemesterCard({
   zoomed?: boolean;
 }) {
   const current = today >= semester.start && today <= semester.end;
+  const sessionDays = useMemo(() => indexSessionsByDay(sessions), [sessions]);
   const future = today < semester.start;
   const total = activities.filter(
     (a) => a.occurred_on >= semester.start && a.occurred_on <= semester.end,
@@ -169,26 +182,55 @@ function SemesterCard({
                   : undefined;
                 const summary =
                   day && !outside ? summaries.get(day) : undefined;
+                const visual = day
+                  ? dayVisual(
+                      day,
+                      goals,
+                      summary?.activities || [],
+                      sessionDays.get(day) || [],
+                    )
+                  : undefined;
                 const title = day
-                  ? `${formatDate(day, true)}${outside ? " · Ngoài học kỳ" : holiday ? ` · ${holiday.label}` : ""} · ${formatMinutes(summary?.minutes || 0)}${summary?.label ? ` · ${summary.label}` : " · Chưa có hoạt động"}`
+                  ? `${formatDate(day, true)}${outside ? " · Ngoài học kỳ" : holiday ? ` · ${holiday.label}` : ""} · ${formatMinutes(summary?.minutes || 0)}${summary?.label ? ` · ${summary.label}` : ""}${visual?.plans.length ? ` · ${visual.plans.length} phiên dự định` : ""}${visual?.ranges.length ? ` · ${visual.ranges.map((g) => g.title).join(", ")}` : ""}`
                   : "";
                 return day ? (
-                  <button
+                  <div
+                    className={`day-slot ${visual?.ranges.length ? "range-day" : ""} ${visual?.uncertain ? "uncertain-range" : ""}`}
+                    style={{
+                      background: visual?.ranges.length
+                        ? visual.rangeBackground
+                        : undefined,
+                    }}
                     key={day}
-                    type="button"
-                    className={`day-cell ${outside ? "outside-term" : ""} ${holiday ? "holiday" : ""} ${day === today ? "today" : ""} ${day === selectedDay ? "selected" : ""} ${summary?.deadlines.length ? "has-deadline" : ""} ${summary?.marker ? "has-marker" : ""}`}
-                    style={{ background: dayBackground(summary, mode) }}
-                    title={title}
-                    aria-label={title}
-                    aria-pressed={day === selectedDay}
-                    disabled={outside}
-                    onClick={() => onDay(day)}
                   >
-                    <span aria-hidden="true">{summary?.marker}</span>
-                    {(summary?.colors.length || 0) > 4 && (
-                      <i className="day-overflow" aria-hidden="true" />
-                    )}
-                  </button>
+                    <button
+                      type="button"
+                      className={`day-cell ${outside ? "outside-term" : ""} ${holiday ? "holiday" : ""} ${day === today ? "today" : ""} ${day === selectedDay ? "selected" : ""} ${visual?.planned ? "has-plan" : ""} ${summary?.marker ? "has-marker" : ""}`}
+                      style={{ background: visual?.background }}
+                      title={title}
+                      aria-label={title}
+                      aria-pressed={day === selectedDay}
+                      disabled={outside}
+                      onClick={() => onDay(day)}
+                    >
+                      {!!visual?.fixed.length && (
+                        <i
+                          className="deadline-corner"
+                          style={{ background: visual.corner }}
+                        />
+                      )}
+                      <span aria-hidden="true">
+                        {summary?.marker === "★"
+                          ? "★"
+                          : visual?.fixed.length
+                            ? summary?.marker
+                            : ""}
+                      </span>
+                      {(summary?.colors.length || 0) > 4 && (
+                        <i className="day-overflow" aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
                 ) : (
                   <span className="day-cell blank" key={`blank-${i}`} />
                 );
@@ -202,38 +244,17 @@ function SemesterCard({
           <p className="muted small">
             Khoảng mục tiêu · không tính vào thời gian thực làm
           </p>
-          {semesterGoals.map((g) => {
-            const start =
-                (g.starts_on || g.deadline) > semester.start
-                  ? g.starts_on || g.deadline
-                  : semester.start,
-              end = g.deadline < semester.end ? g.deadline : semester.end,
-              totalDays = daysBetween(semester.start, semester.end) + 1;
-            return (
-              <div className="goal-range" key={g.id}>
-                <span>
-                  <i className="color-dot" style={{ background: g.color }} />
-                  {g.title} · {goalProgressText(g)}
-                </span>
-                <div className="range-track">
-                  <i
-                    title={goalDateText(g)}
-                    style={{
-                      background: g.color,
-                      marginLeft: `${(daysBetween(semester.start, start) / totalDays) * 100}%`,
-                      width: `${(Math.max(1, daysBetween(start, end) + 1) / totalDays) * 100}%`,
-                    }}
-                  />
-                </div>
-                <small>{goalDateText(g)}</small>
+          {semesterGoals
+            .filter((g) => timingMode(g) !== "fixed")
+            .map((g) => (
+              <div className="range-caption" key={g.id}>
+                <i style={{ background: g.color }} />
+                {g.title} · {goalDateText(g)} ·{" "}
+                {timingMode(g) === "flexible"
+                  ? "Chưa chốt ngày"
+                  : "Khoảng đã xác định"}
               </div>
-            );
-          })}
-          {semester.breaks.map((b, i) => (
-            <p className="muted small" key={i}>
-              ▧ {b.label}: {formatDate(b.start)} – {formatDate(b.end)}
-            </p>
-          ))}
+            ))}
         </div>
       )}
       <div className="semester-footer">
@@ -383,6 +404,12 @@ export default function Tracker() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [sessions, setSessions] = useState<FocusSession[]>([]);
+  const [sessionRequest, setSessionRequest] = useState<string | null>(null);
+  const [journalGoal, setJournalGoal] = useState("all");
+  const [preset, setPreset] = useState<Partial<Profile> | null>(null);
+  const didChooseView = useRef(false);
+  const authenticatedId = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -399,7 +426,6 @@ export default function Tracker() {
   const [query, setQuery] = useState("");
   const [journalLimit, setJournalLimit] = useState(30);
   const [mobileNav, setMobileNav] = useState(false);
-  const [heatmapMode, setHeatmapMode] = useState<HeatmapMode>("goals");
   const [heatmapGoal, setHeatmapGoal] = useState("all");
   const version = useRef({ value: 0 });
   const showDemo = useCallback(() => {
@@ -451,16 +477,26 @@ export default function Tracker() {
       }
       if (requestVersion !== version.current.value) return;
       const savedProfile = profileResult.data as Profile | null;
-      setProfile(
-        savedProfile || {
-          id: currentUser.id,
-          display_name: currentUser.user_metadata.display_name || "Bạn",
-          start_year: new Date().getFullYear(),
-          start_month: 9,
-          study_years: 4,
-          semester_settings: [],
-        },
-      );
+      const resolvedProfile: Profile = savedProfile || {
+        id: currentUser.id,
+        display_name: currentUser.user_metadata.display_name || "Bạn",
+        start_year: new Date().getFullYear(),
+        start_month: 8,
+        study_years: 4,
+        semester_settings: [],
+        wake_minutes: 420,
+        sleep_minutes: 1380,
+        confirmed_semesters: [],
+      };
+      if (!savedProfile) {
+        const recovery = await db.from("profiles").upsert(resolvedProfile, {
+          onConflict: "id",
+          ignoreDuplicates: true,
+        });
+        if (recovery.error) throw recovery.error;
+      }
+      if (requestVersion !== version.current.value) return;
+      setProfile(resolvedProfile);
       setGoals(allGoals);
       setHeatmapGoal((previous) =>
         allGoals.some((g) => g.id === previous) ? previous : "all",
@@ -489,12 +525,14 @@ export default function Tracker() {
       data: { subscription },
     } = db.auth.onAuthStateChange((event, session) => {
       const currentUser = session?.user || null;
+      const sameAccount = authenticatedId.current === currentUser?.id;
+      authenticatedId.current = currentUser?.id || null;
       setUser(currentUser);
       if (event === "PASSWORD_RECOVERY") setModal({ kind: "recovery" });
       if (currentUser) {
         if (
           event === "INITIAL_SESSION" ||
-          event === "SIGNED_IN" ||
+          (event === "SIGNED_IN" && !sameAccount) ||
           event === "PASSWORD_RECOVERY"
         ) {
           setLoading(true);
@@ -505,6 +543,9 @@ export default function Tracker() {
         }
       } else {
         version.current.value++;
+        didChooseView.current = false;
+        setSessions([]);
+        setSessionRequest(null);
         setSelectedDay(null);
         setHeatmapGoal("all");
         showDemo();
@@ -524,17 +565,41 @@ export default function Tracker() {
     return () => clearTimeout(timer);
   }, [notice]);
   const semesters = useMemo(
-    () =>
-      profile
-        ? buildSemesters(
-            profile.start_year,
-            profile.start_month,
-            profile.study_years,
-            profile.semester_settings,
-          )
-        : [],
+    () => (profile ? journeySemesters(profile) : []),
     [profile],
   );
+  const receiveSessions = useCallback(
+    (rows: FocusSession[]) => {
+      setSessions(rows);
+      if (rows.length && profile && !didChooseView.current) {
+        didChooseView.current = true;
+        const current = journeySemesters(profile).find(
+          (s) => todayKey() >= s.start && todayKey() <= s.end,
+        );
+        if (current) {
+          setZoom(String(current.index));
+          setYearFilter("all");
+        }
+      }
+    },
+    [profile],
+  );
+  useEffect(() => {
+    const raw = new URLSearchParams(window.location.search).get("calendar");
+    if (!raw) return;
+    try {
+      const candidate = parseCalendarPreset(raw);
+      window.setTimeout(() => setPreset(candidate), 0);
+    } catch {
+      window.setTimeout(
+        () =>
+          setNotice(
+            "Liên kết mẫu lịch không hợp lệ. Bạn vẫn có thể chỉnh lịch trong cài đặt.",
+          ),
+        0,
+      );
+    }
+  }, []);
   const workActivities = useMemo(() => activities.filter(isWork), [activities]);
   const visibleGoals = useMemo(
     () =>
@@ -547,6 +612,13 @@ export default function Tracker() {
         ? activities
         : activities.filter((a) => a.goal_id === heatmapGoal),
     [activities, heatmapGoal],
+  );
+  const visibleSessions = useMemo(
+    () =>
+      heatmapGoal === "all"
+        ? sessions
+        : sessions.filter((s) => s.goal_id === heatmapGoal),
+    [sessions, heatmapGoal],
   );
   const summaries = useMemo(
     () => summarizeDays(visibleGoals, visibleActivities),
@@ -650,7 +722,8 @@ export default function Tracker() {
       .upsert({ ...data, id: currentUser.id });
     if (error) throw error;
     setProfile(data);
-    setZoom("all");
+    setPreset(null);
+    if (zoom !== "all" && Number(zoom) >= data.study_years * 2) setZoom("all");
     setYearFilter("all");
     setNotice("Đã cập nhật hành trình.");
   }
@@ -664,6 +737,8 @@ export default function Tracker() {
       await saveGoal(
         {
           starts_on: goal.starts_on,
+          timing_mode: goal.timing_mode,
+          reserved_hours: goal.reserved_hours,
           semester_index: goal.semester_index,
           metric_current:
             goal.tracking_mode === "numeric"
@@ -743,9 +818,10 @@ export default function Tracker() {
           if (r.data.length < 1000) return rows;
         }
       };
-      const [sessions, budgets] = await Promise.all([
+      const [sessions, budgets, timetable_entries] = await Promise.all([
         read("focus_sessions"),
         read("weekly_budgets"),
+        read("timetable_entries"),
       ]);
       const blob = new Blob(
         [
@@ -758,6 +834,7 @@ export default function Tracker() {
               activities,
               sessions,
               budgets,
+              timetable_entries,
             },
             null,
             2,
@@ -814,10 +891,15 @@ export default function Tracker() {
       g.title.toLocaleLowerCase("vi").includes(query.toLocaleLowerCase("vi"))
     );
   });
-  const filteredActivities = recent.filter((a) =>
-    `${a.title} ${a.notes}`
-      .toLocaleLowerCase("vi")
-      .includes(query.toLocaleLowerCase("vi")),
+  const filteredActivities = recent.filter(
+    (a) =>
+      (journalGoal === "all" ||
+        (journalGoal === "unassigned"
+          ? !a.goal_id
+          : a.goal_id === journalGoal)) &&
+      `${a.title} ${a.notes}`
+        .toLocaleLowerCase("vi")
+        .includes(query.toLocaleLowerCase("vi")),
   );
   const dayActivities = selectedDay
     ? recent.filter((a) => a.occurred_on === selectedDay)
@@ -1008,6 +1090,22 @@ export default function Tracker() {
           </div>
         </header>
         <main id="main" className="main-content">
+          {preset && (
+            <div className="term-confirm">
+              <span>
+                Liên kết có mẫu lịch học kỳ. Xem lại trước khi áp dụng.
+              </span>
+              <button
+                className="text-button"
+                onClick={() => setModal({ kind: user ? "settings" : "auth" })}
+              >
+                Xem mẫu lịch
+              </button>
+              <button className="text-button" onClick={() => setPreset(null)}>
+                Bỏ qua
+              </button>
+            </div>
+          )}
           {!user && !loading && (
             <div className="demo-banner">
               <span>
@@ -1160,7 +1258,9 @@ export default function Tracker() {
                       <div className="section-heading">
                         <div>
                           <h2>
-                            Toàn cảnh {profile.study_years} năm
+                            {zoom === "all"
+                              ? `Toàn cảnh ${profile.study_years} năm`
+                              : "Tiến trình kỳ học"}
                             <span className="count-badge">
                               {profile.start_year} —{" "}
                               {profile.start_year + profile.study_years}
@@ -1219,29 +1319,6 @@ export default function Tracker() {
                         )}
                       </div>
                       <div className="heatmap-toolbar">
-                        <div
-                          className="segmented"
-                          aria-label="Cách xem timeline"
-                        >
-                          <button
-                            className={
-                              heatmapMode === "goals" ? "selected" : ""
-                            }
-                            aria-pressed={heatmapMode === "goals"}
-                            onClick={() => setHeatmapMode("goals")}
-                          >
-                            Mục tiêu & cột mốc
-                          </button>
-                          <button
-                            className={
-                              heatmapMode === "focus" ? "selected" : ""
-                            }
-                            aria-pressed={heatmapMode === "focus"}
-                            onClick={() => setHeatmapMode("focus")}
-                          >
-                            Năng suất
-                          </button>
-                        </div>
                         <select
                           aria-label="Lọc mục tiêu trên timeline"
                           value={heatmapGoal}
@@ -1255,7 +1332,7 @@ export default function Tracker() {
                           ))}
                         </select>
                       </div>
-                      {heatmapMode === "goals" && (
+                      {
                         <div
                           className="goal-color-key"
                           aria-label="Chú thích màu mục tiêu"
@@ -1278,7 +1355,71 @@ export default function Tracker() {
                             </button>
                           ))}
                         </div>
+                      }
+                      {zoom !== "all" && (
+                        <div
+                          className="journey-strip"
+                          aria-label="Toàn cảnh thu nhỏ"
+                        >
+                          <button
+                            onClick={() => {
+                              setZoom("all");
+                              setYearFilter("all");
+                            }}
+                          >
+                            Toàn cảnh {profile.study_years} năm
+                          </button>
+                          {semesters.map((s) => (
+                            <button
+                              className={
+                                String(s.index) === zoom ? "selected" : ""
+                              }
+                              key={s.index}
+                              title={`Năm ${s.year} · ${s.label}`}
+                              onClick={() => {
+                                didChooseView.current = true;
+                                setZoom(String(s.index));
+                              }}
+                            >
+                              HK{s.index + 1}
+                            </button>
+                          ))}
+                        </div>
                       )}
+                      {user &&
+                        currentSemester &&
+                        !(profile.confirmed_semesters || []).includes(
+                          currentSemester.index,
+                        ) && (
+                          <div className="term-confirm">
+                            <span>
+                              Kỳ này bắt đầu{" "}
+                              {formatDate(currentSemester.start, true)} phải
+                              không? <small>Ước tính, chỉnh được</small>
+                            </span>
+                            <button
+                              className="text-button"
+                              onClick={() =>
+                                void saveProfile({
+                                  ...profile,
+                                  semester_settings: journeySettings(profile),
+                                  confirmed_semesters: [
+                                    ...(profile.confirmed_semesters || []),
+                                    currentSemester.index,
+                                  ],
+                                }).catch((e) => setNotice(errorMessage(e)))
+                              }
+                            >
+                              Đúng ngày
+                            </button>
+                            <button
+                              className="text-button"
+                              onClick={() => setModal({ kind: "settings" })}
+                            >
+                              Chỉnh ngày
+                            </button>
+                          </div>
+                        )}
                       <div
                         className={`timeline-grid ${zoom !== "all" ? "semester-zoom" : ""}`}
                       >
@@ -1322,7 +1463,7 @@ export default function Tracker() {
                                       key={semester.index}
                                       semester={semester}
                                       summaries={summaries}
-                                      mode={heatmapMode}
+                                      sessions={visibleSessions}
                                       activities={visibleActivities}
                                       goals={visibleGoals}
                                       today={today}
@@ -1357,24 +1498,20 @@ export default function Tracker() {
                         <span>
                           <b>★</b> Đã đạt
                         </span>
-                        {heatmapMode === "focus" ? (
-                          <span className="scale">
-                            0
-                            {[0, 1, 2, 3, 4].map((i) => (
-                              <i key={i} className={`level-${i}`} />
-                            ))}
-                            ≥ 3 giờ
-                          </span>
-                        ) : (
-                          <span>
-                            <i className="legend-split" /> Nhiều mục tiêu
-                          </span>
-                        )}
+                        <span>
+                          <i className="legend-planned" />
+                          Dự định
+                        </span>
+                        <span>
+                          <i className="legend-split" />
+                          Giờ đã làm
+                        </span>
+                        <span>▧ Khoảng sự kiện</span>
                       </div>
                       <p className="muted small heatmap-help">
-                        {heatmapMode === "goals"
-                          ? "Màu nhạt: hoạt động/tiến độ · Màu đậm có viền: deadline · Hai mục tiêu chia chéo, 3–4 mục tiêu chia góc; dấu chấm đen báo còn mục khác."
-                          : "Sắc xanh theo thời lượng: dưới 30 phút, 30–89 phút, 90–179 phút, từ 180 phút. Ghi chú chưa có thời lượng dùng xanh nhạt."}
+                        Màu mục tiêu, đậm theo giờ đã log · Viền đứt: phiên dự
+                        định · Dấu góc: hạn đã chốt · Nền dải tuần: khoảng sự
+                        kiện (viền đứt khi ngày chưa chốt).
                       </p>
                       <div className="journey-footer">
                         <GraduationCap size={18} />
@@ -1616,6 +1753,24 @@ export default function Tracker() {
                         {activities.length.toLocaleString("vi-VN")} hoạt động đã
                         ghi lại
                       </h2>
+                      <select
+                        aria-label="Lọc nhật ký theo mục tiêu"
+                        value={journalGoal}
+                        onChange={(e) => {
+                          setJournalGoal(e.target.value);
+                          setJournalLimit(30);
+                        }}
+                      >
+                        <option value="all">Tất cả mục tiêu</option>
+                        <option value="unassigned">
+                          Không gắn mục tiêu / đã xóa
+                        </option>
+                        {goals.map((g) => (
+                          <option key={g.id} value={g.id}>
+                            {g.title}
+                          </option>
+                        ))}
+                      </select>
                       <label className="search-field">
                         <Search size={17} />
                         <input
@@ -1746,12 +1901,19 @@ export default function Tracker() {
             <PlanningHub
               key={user?.id || "demo"}
               visible={view === "planning"}
+              onSessionsChange={receiveSessions}
+              requestedSession={sessionRequest}
+              onCloseRequested={() => setSessionRequest(null)}
               userId={user?.id}
               profile={profile}
               goals={goals}
               activities={activities}
               onAuth={() => setModal({ kind: "auth" })}
-              onImport={() => setModal({ kind: user ? "import" : "auth" })}
+              onImport={(initialKind) =>
+                setModal(
+                  user ? { kind: "import", initialKind } : { kind: "auth" },
+                )
+              }
               onChanged={async () => {
                 if (user) await loadData(user);
               }}
@@ -1804,6 +1966,7 @@ export default function Tracker() {
       )}
       {modal?.kind === "import" && profile && user && (
         <ImportDialog
+          initialKind={modal.initialKind}
           goals={goals}
           activities={activities}
           profile={profile}
@@ -1816,7 +1979,7 @@ export default function Tracker() {
       )}
       {modal?.kind === "settings" && profile && (
         <SettingsForm
-          profile={profile}
+          profile={preset ? { ...profile, ...preset } : profile}
           onClose={() => setModal(null)}
           onSave={saveProfile}
         />
@@ -1858,6 +2021,31 @@ export default function Tracker() {
           onClose={() => setSelectedDay(null)}
         >
           <div className="day-detail">
+            {selectedDay && sessionsOnDay(sessions, selectedDay).length > 0 && (
+              <section>
+                <h3>Phiên học trong ngày</h3>
+                {sessionsOnDay(sessions, selectedDay).map((s) => (
+                  <button
+                    className="day-session-button"
+                    key={s.id}
+                    onClick={() => {
+                      setSelectedDay(null);
+                      setSessionRequest(s.id);
+                    }}
+                  >
+                    <Clock3 size={17} />
+                    <span>
+                      <strong>{s.title}</strong>
+                      <small>
+                        {localDateTime(s.scheduled_start).slice(11)}–
+                        {localDateTime(s.scheduled_end).slice(11)} ·{" "}
+                        {s.status === "completed" ? "Đã xác nhận" : "Mở timer"}
+                      </small>
+                    </span>
+                  </button>
+                ))}
+              </section>
+            )}
             {dayGoals.length > 0 && (
               <>
                 <h3>
@@ -1932,16 +2120,18 @@ export default function Tracker() {
                 ))}
               </>
             )}
-            {!dayActivities.length && !dayGoals.length && (
-              <div className="empty-small">
-                <CalendarDays size={30} />
-                <p>
-                  {selectedDay > today
-                    ? "Một ngày đang chờ những dự định của bạn."
-                    : "Chưa có hoạt động nào được ghi lại trong ngày này."}
-                </p>
-              </div>
-            )}
+            {!dayActivities.length &&
+              !dayGoals.length &&
+              !sessionsOnDay(sessions, selectedDay).length && (
+                <div className="empty-small">
+                  <CalendarDays size={30} />
+                  <p>
+                    {selectedDay > today
+                      ? "Một ngày đang chờ những dự định của bạn."
+                      : "Chưa có hoạt động nào được ghi lại trong ngày này."}
+                  </p>
+                </div>
+              )}
             <div className="form-actions">
               {selectedDay <= today && (
                 <button

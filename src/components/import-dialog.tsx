@@ -6,6 +6,8 @@ import { getSupabase } from "@/lib/supabase";
 import { errorMessage } from "@/lib/errors";
 import {
   todayKey,
+  addDays,
+  parseDate,
   type Activity,
   type Goal,
   type Profile,
@@ -21,29 +23,58 @@ import {
   type ImportKind,
 } from "@/lib/importer";
 import { monday } from "@/lib/planning";
+import {
+  journeySemesters,
+  clockMinutes,
+  type TimetableEntry,
+} from "@/lib/schedule";
 import type { FileText } from "@/lib/import-files";
 
+const timetableSample =
+  "Tên môn học,Thứ,Giờ bắt đầu,Giờ kết thúc,Loại\nCấu trúc dữ liệu,T2,08:00,10:00,class\nThể thao,T4,17:00,18:00,fixed";
 const sample =
   "title,date,end_date,start_time,end_time,goal_id,minutes\nLuyện IELTS,2026-09-07,2026-09-07,19:00,20:00,,60\nViết Paper,2026-09-08,2026-09-08,14:00,16:00,,120";
 export default function ImportDialog({
+  initialKind = "session",
   goals,
   activities,
   profile,
   onClose,
   onImported,
 }: {
+  initialKind?: "session" | "timetable";
   goals: Goal[];
   activities: Activity[];
   profile: Profile;
   onClose: () => void;
   onImported: () => Promise<void>;
 }) {
+  const initialTerm =
+    journeySemesters(profile).find(
+      (t) => t.start <= todayKey() && t.end >= todayKey(),
+    ) || journeySemesters(profile)[0];
   const [text, setText] = useState(""),
     [format, setFormat] = useState<FileText["format"]>("table"),
-    [kind, setKind] = useState<ImportKind>("session"),
-    [anchor, setAnchor] = useState(monday(todayKey())),
-    [weeks, setWeeks] = useState(1),
-    [skip, setSkip] = useState(true),
+    [kind, setKind] = useState<ImportKind>(initialKind),
+    [anchor, setAnchor] = useState(
+      initialKind === "timetable" ? initialTerm.start : monday(todayKey()),
+    ),
+    [weeks, setWeeks] = useState(
+      initialKind === "timetable"
+        ? Math.ceil(
+            (Date.parse(initialTerm.end) -
+              Date.parse(initialTerm.start) +
+              86400000) /
+              604800000,
+          )
+        : 1,
+    ),
+    [term, setTerm] = useState(
+      () =>
+        journeySemesters(profile).find(
+          (t) => t.start <= todayKey() && t.end >= todayKey(),
+        )?.index || 0,
+    ),
     [rows, setRows] = useState<ImportRow[]>([]),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -68,12 +99,33 @@ export default function ImportDialog({
           : format === "ics"
             ? await parseCalendar(text, anchor, weeks)
             : parseTable(text, kind, anchor);
+      if (format === "ics" && kind === "timetable")
+        base.forEach((r) => {
+          if (r.kind === "session") {
+            r.kind = "timetable";
+            r.timetable = { kind: "class", semester_index: term };
+          }
+        });
       const repeated = repeatImport(
         base,
         format === "ics" ? 1 : weeks,
-        profile.semester_settings,
-        skip,
+        [],
+        false,
       );
+      repeated.forEach((r) => {
+        if (r.kind === "timetable") {
+          r.timetable = {
+            kind: r.timetable?.kind || "class",
+            semester_index:
+              format === "json" ? (r.timetable?.semester_index ?? term) : term,
+          };
+          if (format !== "json" && format !== "ics")
+            r.end_date = [
+              r.end_date,
+              addDays(monday(anchor), weeks * 7 - 1),
+            ].sort()[0];
+        }
+      });
       const seen = new Set<string>();
       const existingSessions: {
         title: string;
@@ -90,6 +142,20 @@ export default function ImportDialog({
             .range(from, from + 999);
           if (q.error) throw q.error;
           existingSessions.push(...q.data);
+          if (q.data.length < 1000) break;
+        }
+      }
+      const existingTimetable: TimetableEntry[] = [];
+      if (repeated.some((r) => r.kind === "timetable")) {
+        for (let from = 0; ; from += 1000) {
+          const q = await getSupabase()!
+            .from("timetable_entries")
+            .select("*")
+            .eq("user_id", profile.id)
+            .order("id")
+            .range(from, from + 999);
+          if (q.error) throw q.error;
+          existingTimetable.push(...q.data);
           if (q.data.length < 1000) break;
         }
       }
@@ -111,6 +177,16 @@ export default function ImportDialog({
         ]);
         const duplicate =
           seen.has(signature) ||
+          (r.kind === "timetable" &&
+            existingTimetable.some(
+              (t) =>
+                t.title === r.title &&
+                t.weekday === (parseDate(r.date).getDay() + 6) % 7 &&
+                t.start_minute === clockMinutes(r.start_time) &&
+                t.end_minute === clockMinutes(r.end_time) &&
+                t.valid_from <= r.end_date &&
+                t.valid_until >= r.date,
+            )) ||
           (r.kind === "session" &&
             existingSessions.some(
               (s) =>
@@ -259,7 +335,20 @@ export default function ImportDialog({
                 Loại mặc định
                 <select
                   value={kind}
-                  onChange={(e) => setKind(e.target.value as ImportKind)}
+                  onChange={(e) => {
+                    const value = e.target.value as ImportKind;
+                    setKind(value);
+                    if (value === "timetable") {
+                      const t = journeySemesters(profile)[term];
+                      setAnchor(t.start);
+                      setWeeks(
+                        Math.ceil(
+                          (Date.parse(t.end) - Date.parse(t.start) + 86400000) /
+                            604800000,
+                        ),
+                      );
+                    }
+                  }}
                 >
                   {Object.entries(labels).map(([k, v]) => (
                     <option key={k} value={k}>
@@ -269,6 +358,36 @@ export default function ImportDialog({
                 </select>
               </label>
             </div>
+            {kind === "timetable" && (
+              <label>
+                TKB của học kỳ
+                <select
+                  value={term}
+                  onChange={(e) => {
+                    const n = Number(e.target.value),
+                      t = journeySemesters(profile)[n];
+                    setTerm(n);
+                    setAnchor(t.start);
+                    setWeeks(
+                      Math.ceil(
+                        (Date.parse(t.end) - Date.parse(t.start) + 86400000) /
+                          604800000,
+                      ),
+                    );
+                  }}
+                >
+                  {journeySemesters(profile).map((t) => (
+                    <option key={t.index} value={t.index}>
+                      Năm {t.year} · {t.label}
+                    </option>
+                  ))}
+                </select>
+                <small>
+                  Lớp học không tính giờ thực làm. Chọn số tuần áp dụng hoặc sửa
+                  ngày cuối ở bản xem trước.
+                </small>
+              </label>
+            )}
             <label>
               Bảng hoặc nội dung cần nhập
               <textarea
@@ -283,13 +402,16 @@ export default function ImportDialog({
               <button
                 className="text-button"
                 onClick={() => {
-                  setText(sample);
+                  setText(kind === "timetable" ? timetableSample : sample);
                   setFormat("table");
                   setReview(false);
                 }}
               >
                 Điền bảng mẫu
               </button>
+              <a href="/templates/timetable.csv" download>
+                Tải mẫu TKB
+              </a>
               <a href="/templates/schedule.csv" download>
                 Tải CSV mẫu
               </a>
@@ -303,9 +425,9 @@ export default function ImportDialog({
                 Tên hoạt động (title), ngày (date), ngày kết thúc (end_date),
                 giờ bắt đầu (start_time), giờ kết thúc (end_time), mục tiêu
                 (goal_id: tên hoặc ID), phút (minutes), ghi chú (notes), loại
-                (kind: goal/session/activity/budget). Ngày dùng YYYY-MM-DD hoặc
-                DD/MM/YYYY, giờ dùng HH:mm. Có thể dùng cột Thứ thay ngày để áp
-                dụng tuần đầu bên dưới.
+                (kind: goal/session/activity/budget/class/fixed). Ngày dùng
+                YYYY-MM-DD hoặc DD/MM/YYYY, giờ dùng HH:mm. Có thể dùng cột Thứ
+                thay ngày để áp dụng tuần đầu bên dưới.
               </p>
               <p>
                 Mục tiêu hỗ trợ thêm tracking_mode
@@ -327,7 +449,7 @@ export default function ImportDialog({
               <label>
                 {format === "ics"
                   ? "Đọc trong bao nhiêu tuần?"
-                  : "Lặp phiên / quỹ giờ trong bao nhiêu tuần?"}
+                  : "Áp dụng phiên / TKB / quỹ giờ trong bao nhiêu tuần?"}
                 <input
                   type="number"
                   required
@@ -338,14 +460,6 @@ export default function ImportDialog({
                 />
               </label>
             </div>
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={skip}
-                onChange={(e) => setSkip(e.target.checked)}
-              />
-              Bỏ phiên rơi vào kỳ nghỉ đã cài đặt
-            </label>
             <p className="muted small">
               Mục tiêu và nhật ký không lặp. ICS được mở rộng theo quy tắc lặp
               của lịch trong khoảng đã chọn.
@@ -570,6 +684,28 @@ export default function ImportDialog({
                               </label>
                             </>
                           )}
+                          {r.kind === "timetable" && (
+                            <label>
+                              Loại lịch cố định
+                              <select
+                                value={r.timetable?.kind || "class"}
+                                onChange={(e) =>
+                                  patch(i, {
+                                    timetable: {
+                                      kind: e.target.value as "class" | "fixed",
+                                      semester_index:
+                                        r.timetable?.semester_index ?? term,
+                                    },
+                                  })
+                                }
+                              >
+                                <option value="class">
+                                  Lớp học trên trường
+                                </option>
+                                <option value="fixed">Việc cố định</option>
+                              </select>
+                            </label>
+                          )}
                           {r.activity?.is_milestone && (
                             <p>
                               ★ Cột mốc đã đạt · {r.activity.milestone_kind}
@@ -616,7 +752,7 @@ export default function ImportDialog({
                         />
                       </td>
                       <td>
-                        {r.kind === "session" ? (
+                        {r.kind === "session" || r.kind === "timetable" ? (
                           <>
                             <input
                               aria-label={`Giờ bắt đầu dòng ${i + 1}`}
@@ -650,7 +786,7 @@ export default function ImportDialog({
                         )}
                       </td>
                       <td>
-                        {r.kind !== "goal" && (
+                        {r.kind !== "goal" && r.kind !== "timetable" && (
                           <select
                             aria-label={`Mục tiêu dòng ${i + 1}`}
                             value={

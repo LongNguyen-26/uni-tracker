@@ -6,17 +6,18 @@ Website: https://uni-tracker-sigma.vercel.app
 
 ## Tính năng
 
-- Timeline 4–6 hàng × 2 học kỳ. Mặc định mỗi kỳ 6 tháng; sửa ngày bắt đầu/kết thúc, tên và kỳ nghỉ riêng cho từng học kỳ trong Cài đặt.
-- Khung luôn trọn tuần thứ Hai–Chủ nhật, giữ ngày học thực tế, làm nhạt ngày ngoài kỳ và đánh dấu ngày nghỉ. Phóng to từng kỳ bằng bộ chọn hoặc ô chặng đường hiện tại.
+- Timeline 4–6 hàng × 2 học kỳ. Ước tính từ năm nhập học: HK1 tháng 8–1, HK2 tháng 2–6; sửa ngày và tên riêng trong Cài đặt. Chia sẻ mẫu lịch bằng liên kết, người nhận xem lại trước khi áp dụng.
+- Học kỳ bắt đầu thứ Hai; đổi ngày đầu dịch ngày cuối theo cùng thời lượng. Khung trọn tuần thứ Hai–Chủ nhật và làm nhạt ngày ngoài kỳ. Phóng to từng kỳ bằng bộ chọn hoặc ô chặng đường hiện tại.
 - Tạo/sửa/xóa mục tiêu với màu, tên và phạm vi một/nhiều kỳ. Chọn lịch cho một hạn cuối hoặc một khoảng ngày.
 - Bốn cách ghi tiến độ: số hiện tại → mục tiêu và đơn vị (IELTS/GPA), checklist với % tự tính (Paper), % nhập tay, hoặc cột mốc đạt/chưa đạt.
 - Màu gợi ý và ký hiệu riêng cho thi giữa kỳ (G), cuối kỳ (C), cột mốc (◆), thành tựu đã đạt (★).
 - Ngày có nhiều mục tiêu chia ô chéo cho hai mục tiêu, chia góc cho 3–4; trên 4 có dấu chấm và danh sách đầy đủ khi mở ngày.
-- Timeline có chế độ màu mục tiêu và chế độ năng suất theo thời lượng; lọc theo mục tiêu.
+- Một lưới duy nhất: nền đặc theo giờ đã log, nền mờ/viền đứt cho phiên dự định, dấu góc cho hạn cố định, nền cột cho khoảng sự kiện và viền đứt cho khoảng chưa chốt. Màu mục tiêu không dùng xanh lá. Khi đã có phiên, mặc định phóng kỳ hiện tại và giữ dải toàn cảnh thu nhỏ.
 - Lưu lịch sử tiến độ và ngày hoàn thành trong cùng transaction với mục tiêu.
-- Nhật ký hoạt động gắn với mục tiêu, có giờ bắt đầu/kết thúc và thời lượng thực làm đến giây. Sửa được cả nhật ký timer và nội dung lịch sử mục tiêu; sửa nhật ký không làm đổi mức hiện tại của mục tiêu.
+- Nhật ký hoạt động gắn với mục tiêu, có giờ bắt đầu/kết thúc và thời lượng thực làm đến giây. Tìm kiếm/lọc theo mục tiêu. Sửa được cả nhật ký timer và nội dung lịch sử mục tiêu; sửa nhật ký không làm đổi mức hiện tại của mục tiêu.
+- TKB/việc cố định lặp theo học kỳ, không tính timer hoặc năng suất. Tính quỹ giờ trống từ giờ thức (mặc định 07–23h), hợp các lịch chồng nhau và giữ giờ cho đợt thi. Lập kế hoạch tuần gợi ý phiên tối đa 2h vào khoảng trống; xem trước rồi xác nhận mới lưu. Thanh truy cập nhanh mở/chạy phiên hôm nay.
 - Trang Tuần của bạn: đặt quỹ giờ theo mục tiêu, so sánh ý định với giờ thực làm và số ngày duy trì.
-- Tạo phiên học với khung giờ, lặp 1–52 tuần, tùy chọn bỏ kỳ nghỉ. Sửa hoặc xóa phiên chưa bắt đầu.
+- Tạo phiên học với khung giờ, lặp 1–52 tuần. Sửa hoặc xóa phiên chưa bắt đầu.
 - Timer đếm ngược, toàn màn hình, tạm dừng/tiếp tục; chỉ một phiên chạy tại một thời điểm. Lưu trạng thái trên Supabase, trừ thời gian nghỉ, giới hạn bằng thời lượng đặt ra. Xem lại và xác nhận trước khi ghi nhật ký; phiên qua nửa đêm được chia theo ngày.
 - Nhập JSON, Excel/CSV/TSV, bảng dán từ Docs, DOCX, lịch ICS, ảnh và PDF theo luồng đọc → sửa bản xem trước → xác nhận → lưu nguyên tử. Có file mẫu và chọn số tuần áp dụng.
 - Báo cáo tuần/tháng: tổng thời gian, số ngày duy trì, biểu đồ từng ngày và tỷ lệ phân bổ thời gian cho từng mục tiêu.
@@ -46,7 +47,7 @@ Chỉ dùng publishable key ở client. Không đưa service role, secret key ho
 
 ## Database
 
-Migration đã lưu trong `supabase/migrations`. Với một dự án Supabase mới, áp dụng đủ bảy migration theo tên thời gian bằng Supabase CLI hoặc SQL Editor. Các bảng: `profiles`, `goals`, `activities`, `weekly_budgets`, `focus_sessions`, `import_batches`.
+Migration đã lưu trong `supabase/migrations`. Với một dự án Supabase mới, áp dụng đủ tám migration theo tên thời gian bằng Supabase CLI hoặc SQL Editor. Các bảng: `profiles`, `goals`, `activities`, `weekly_budgets`, `focus_sessions`, `import_batches`, `timetable_entries`.
 
 RLS dùng `auth.uid()` kiểm tra sở hữu cho đọc/ghi; khóa ngoại tổng hợp ngăn gắn hoạt động vào mục tiêu của người khác. Trigger `record_goal_progress` chạy dưới quyền người gọi và ghi lịch sử trong cùng transaction. Xóa mục tiêu giữ lại lịch sử, bỏ liên kết `goal_id`.
 
@@ -54,7 +55,7 @@ RPC `transition_session` khóa theo tài khoản và phiên, đo từng đoạn 
 
 Các ngày là kiểu `date`; ngày ghi tiến độ tự động dùng múi giờ `Asia/Ho_Chi_Minh`. Ngày hoàn thành có thể nhập lại để ghi nhận một cột mốc trước đó. Khi mở lại rồi hoàn thành một mục tiêu, lịch sử các lần trước vẫn được giữ.
 
-Thống kê năng suất chỉ dùng nhật ký `event`, không đếm lịch sử cập nhật phần trăm hoặc hoàn thành tự động. Cột mốc độc lập không có thời lượng cũng không tính vào độ đều đặn. Hoạt động thông thường chưa nhập thời lượng được tính là một ngày duy trì nhưng không được suy ra số phút. Tuần bắt đầu thứ Hai; mẫu số của kỳ hiện tại chỉ tính những ngày đã qua. Màu nhạt biểu thị hoạt động, màu đậm và viền biểu thị deadline; nhiều mục tiêu cùng ngày vẫn có thể đọc đầy đủ qua nhãn và chi tiết ngày.
+Thống kê năng suất chỉ dùng nhật ký `event`, không đếm lịch sử cập nhật phần trăm hoặc hoàn thành tự động. Cột mốc độc lập không có thời lượng cũng không tính vào độ đều đặn. Hoạt động thông thường chưa nhập thời lượng được tính là một ngày duy trì nhưng không được suy ra số phút. Tuần bắt đầu thứ Hai; mẫu số của kỳ hiện tại chỉ tính những ngày đã qua. Nền đặc biểu thị giờ thực làm, nền nhạt/viền đứt biểu thị ý định, dấu góc và nền cột biểu thị cột mốc; nhiều mục tiêu cùng ngày vẫn có thể đọc đầy đủ qua nhãn và chi tiết ngày.
 
 ## Supabase Auth cho production
 
@@ -72,8 +73,9 @@ Security Advisor hiện còn cảnh báo cấu hình sẵn có: [Leaked password
 
 Mở **Nhập dữ liệu** hoặc **Tuần của bạn → Nhập lịch**. Tải file mẫu trong hộp thoại để có các tiêu đề cột phù hợp. Với bảng Docs, dán trực tiếp văn bản bảng (các cột cách nhau bằng tab). File Excel cho phép chọn sheet; ngày nên có đủ năm, giờ dùng `09:00`.
 
-- JSON có thể chứa `goals`, `activities`, `sessions`, `budgets`; phiên đang chạy/đã hoàn tất không được khôi phục thành phiên mới. Nhật ký thực tế vẫn nhập được. Xuất JSON bao gồm cả cài đặt nhưng nhập hiện chỉ nhận dữ liệu nghiệp vụ; sửa cài đặt hành trình trong trang Cài đặt.
+- JSON có thể chứa `goals`, `activities`, `sessions`, `budgets`, `timetable_entries`; phiên đang chạy/đã hoàn tất không được khôi phục thành phiên mới. Nhật ký thực tế vẫn nhập được. Xuất JSON bao gồm cả cài đặt nhưng nhập hiện chỉ nhận dữ liệu nghiệp vụ; sửa cài đặt hành trình trong trang Cài đặt.
 - CSV/TSV nhận ngày ISO hoặc ngày/tháng/năm và thứ T2–CN theo tuần bắt đầu đã chọn. Tên mục tiêu có thể ghép với mục tiêu hiện có hoặc chọn lại trong bản xem trước.
+- TKB dùng loại `class` hoặc `fixed`; bảng chỉ có thứ/giờ được áp dụng cho học kỳ và số tuần đã chọn. Không biến lịch học trên trường thành phiên tập trung.
 - ICS đọc sự kiện, lặp lịch, ngoại lệ; sự kiện cả ngày thành khoảng mục tiêu. Lịch dùng TZID cần kèm định nghĩa VTIMEZONE để tránh đổi giờ sai. Đây là nhập file, chưa đồng bộ trực tiếp với Google Calendar.
 - Ảnh/PDF dùng đọc chữ trên thiết bị; cần mạng để tải bộ OCR Việt/Anh lần đầu. Chữ nhận được hiển thị để sửa thành bảng trước khi phân tích. Bảng phức tạp, chữ viết tay hoặc ảnh mờ có thể cần sửa nhiều; chưa tự hiểu mọi bố cục thời khóa biểu.
 - Giới hạn mỗi file 10 MB, tối đa 500 dòng mỗi lượt, PDF 10 trang, ảnh/trang quét 16 triệu điểm ảnh. Nội dung file không được tải lên dịch vụ OCR; chỉ dữ liệu đã xác nhận mới được lưu Supabase.
@@ -83,7 +85,7 @@ Mở **Nhập dữ liệu** hoặc **Tuần của bạn → Nhập lịch**. T�
 
 Repo: https://github.com/LongNguyen-26/uni-tracker
 
-Thêm hai biến môi trường trên vào Production, Preview và Development của Vercel. Liên kết GitHub với Vercel; push lên `main` tạo production deployment tự động. Mỗi pull request tạo preview theo cấu hình Vercel.
+Thêm hai biến môi trường trên vào Production, Preview và Development của Vercel. Liên kết GitHub với Vercel; push lên `main` tạo production deployment tự động. Sau mỗi release ghi kết quả đã xác minh vào `AGENTS.md`. Commit chỉ cập nhật bản ghi triển khai (`docs: record deployment…`, chỉ thay `AGENTS.md`) được bỏ qua build bằng `scripts/ignore-build.mjs`, tránh sinh vòng lặp triển khai chỉ để ghi lịch sử. Mỗi pull request tạo preview theo cấu hình Vercel.
 
 Các môi trường hiện dùng chung Supabase project. Không dùng dữ liệu thật khi thử chức năng phá hủy dữ liệu trên preview; có thể tạo Supabase project riêng cho staging khi cần.
 
@@ -104,6 +106,10 @@ npm run build
 `tests/focus-database.sql` cũng rollback toàn bộ: kiểm tra ràng buộc cột mốc, màu, thời lượng, hoàn thành có metadata, gỡ liên kết và giữ màu/tên mục tiêu đã xóa.
 
 `tests/planning-database.sql` rollback toàn bộ: kiểm tra numeric/checklist, quỹ giờ, timer bỏ thời gian nghỉ/chia ngày/xác nhận một lần, sửa nhật ký timer, import nguyên tử/chống trùng và ngăn truy cập chéo tài khoản.
+
+`tests/schedule.test.ts` kiểm tra lịch ước tính thứ Hai, quỹ giờ trống, gợi ý không chồng lịch/không xếp giờ quá khứ, màu riêng cho ý định/thực tế, TKB nhập lặp và mẫu lịch chia sẻ. `tests/schedule-database.sql` rollback kiểm tra TKB không tạo phiên, chống trùng, RLS và hoàn tác nguyên tử khi gợi ý bị trùng lịch.
+
+Hồ sơ bị xóa thủ công được tạo lại khi mở ứng dụng, giữ mục tiêu/nhật ký; người dùng cần đặt lại năm nhập học nếu cấu hình cũ đã mất. Đổi tab trình duyệt không làm tải lại dữ liệu hoặc đưa người dùng về màn hình đầu.
 
 ## Giới hạn chủ ý
 

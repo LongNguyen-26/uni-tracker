@@ -6,7 +6,15 @@ import DatePicker from "./date-picker";
 import { ColorPicker, MilestoneSelect } from "./forms";
 import { errorMessage } from "@/lib/errors";
 import {
-  buildSemesters,
+  isGreen,
+  academicSettings,
+  journeySettings,
+  moveSemester,
+  timingMode,
+  clockMinutes,
+  minuteClock,
+} from "@/lib/schedule";
+import {
   CATEGORIES,
   GOAL_COLORS,
   MILESTONE_COLORS,
@@ -53,6 +61,9 @@ export function GoalForm({
   );
   const [steps, setSteps] = useState<GoalStep[]>(goal?.checklist || []);
   const [start, setStart] = useState(goal?.starts_on || "");
+  const [timing, setTiming] = useState<"fixed" | "window" | "flexible">(
+    goal ? timingMode(goal) : "fixed",
+  );
   const [end, setEnd] = useState(goal?.deadline || defaultDate);
   const [completed, setCompleted] = useState(goal?.completed_on || todayKey());
   const [scope, setScope] = useState(goal?.semester_index?.toString() ?? "");
@@ -74,11 +85,17 @@ export function GoalForm({
     try {
       if (!validDate(end) || (start && (!validDate(start) || start > end)))
         throw new Error("Khoảng thời gian chưa hợp lệ.");
+      if (timing !== "fixed" && !start)
+        throw new Error("Hãy chọn ngày đầu của khoảng thời gian.");
       if (
         mode === "checklist" &&
         (!steps.length || steps.some((s) => !s.title.trim()))
       )
         throw new Error("Hãy đặt tên cho ít nhất một cột mốc dự án.");
+      if (isGreen(color))
+        throw new Error(
+          "Hãy chọn màu khác xanh lá; xanh lá được dành cho thương hiệu.",
+        );
       const title = String(form.get("title")).trim();
       if (!title) throw new Error("Hãy nhập tên mục tiêu.");
       await onSave(
@@ -90,6 +107,8 @@ export function GoalForm({
           tracking_mode: mode,
           milestone_kind: mode === "milestone" ? kind : "general",
           starts_on: start || null,
+          timing_mode: timing,
+          reserved_hours: Number(form.get("reserved_hours") || 0),
           deadline: end,
           semester_index: scope === "" ? null : Number(scope),
           metric_current: current,
@@ -367,12 +386,31 @@ export function GoalForm({
             </select>
           </label>
         </div>
+        <label>
+          Thời gian cột mốc
+          <select
+            value={timing}
+            onChange={(e) => setTiming(e.target.value as typeof timing)}
+          >
+            <option value="fixed">Ngày đã chốt · dấu góc</option>
+            <option value="window">Khoảng đã xác định · ví dụ tuần thi</option>
+            <option value="flexible">
+              Ngày chưa chốt trong khoảng · ví dụ đầu tháng 12
+            </option>
+          </select>
+        </label>
         <div className="form-row">
           <DatePicker
-            label="Bắt đầu (tùy chọn)"
+            label={
+              timing === "fixed"
+                ? "Bắt đầu mục tiêu (tùy chọn)"
+                : "Khoảng bắt đầu"
+            }
             value={start}
-            onChange={setStart}
-            max={end}
+            onChange={(day) => {
+              setStart(day);
+              if (day && day > end) setEnd(day);
+            }}
             optional
           />
           <DatePicker
@@ -383,9 +421,26 @@ export function GoalForm({
           />
         </div>
         <p className="muted small">
-          Chọn hai ngày để thể hiện khoảng thực hiện. Chỉ chọn hạn nếu đây là
-          một mốc duy nhất.
+          Nền ô thể hiện giờ đã làm. Cột mốc dùng dấu góc hoặc dải nền riêng,
+          không cộng vào năng suất.
         </p>
+        {timing !== "fixed" && (
+          <label>
+            Giờ cần giữ lại mỗi tuần trong khoảng này
+            <input
+              name="reserved_hours"
+              type="number"
+              min={0}
+              max={168}
+              step={0.5}
+              defaultValue={goal?.reserved_hours || 0}
+            />
+            <small>
+              Ví dụ giữ 8 giờ/tuần khi có đợt thi. Quỹ này giảm giờ còn trống,
+              không tự tạo nhật ký ôn thi.
+            </small>
+          </label>
+        )}
         {derived === 100 && (
           <DatePicker
             label="Ngày hoàn thành"
@@ -435,39 +490,41 @@ export function SettingsForm({
   onSave: (data: Profile) => Promise<void>;
   onClose: () => void;
 }) {
-  const [years, setYears] = useState(profile.study_years);
-  const [year, setYear] = useState(profile.start_year);
-  const [month, setMonth] = useState(profile.start_month);
-  const defaults = (y: number, m: number, n: number) =>
-    buildSemesters(y, m, n).map(({ index, start, end, label, breaks }) => ({
-      index,
-      start,
-      end,
-      label,
-      breaks,
-    }));
+  const [years, setYears] = useState(profile.study_years),
+    [year, setYear] = useState(profile.start_year);
   const [terms, setTerms] = useState<SemesterSettings[]>(
-    profile.semester_settings.length
-      ? profile.semester_settings
-      : defaults(year, month, years),
+    journeySettings(profile),
   );
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const patch = (i: number, value: Partial<SemesterSettings>) =>
-    setTerms(terms.map((s, j) => (i === j ? { ...s, ...value } : s)));
+  const [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [share, setShare] = useState("");
+  const [confirmed, setConfirmed] = useState(profile.confirmed_semesters || []);
+  const patch = (i: number, value: Partial<SemesterSettings>) => {
+    setTerms((prev) =>
+      prev.map((s) => (s.index === i ? { ...s, ...value, breaks: [] } : s)),
+    );
+    setConfirmed((prev) => [...new Set([...prev, i])]);
+  };
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const form = new FormData(e.currentTarget);
+    const f = new FormData(e.currentTarget);
     setBusy(true);
     setError("");
     try {
+      const wake = clockMinutes(String(f.get("wake"))),
+        sleep = clockMinutes(String(f.get("sleep")));
+      if (sleep <= wake)
+        throw new Error("Giờ kết thúc ngày phải sau giờ thức dậy.");
       const p = {
         ...profile,
-        display_name: String(form.get("name")).trim(),
+        display_name: String(f.get("name")).trim(),
         start_year: year,
-        start_month: month,
+        start_month: 8,
         study_years: years,
         semester_settings: terms,
+        confirmed_semesters: confirmed,
+        wake_minutes: wake,
+        sleep_minutes: sleep,
       };
       validateSemesterSettings(p);
       await onSave(p);
@@ -481,7 +538,7 @@ export function SettingsForm({
   return (
     <Dialog
       title="Cài đặt hành trình"
-      description="Giữ ngày học thực tế của trường. Khung lịch luôn đủ tuần T2–CN."
+      description="Các kỳ được ước tính từ năm nhập học. Chỉ cần chỉnh chính xác kỳ bạn đang học."
       onClose={() => {
         if (!busy) onClose();
       }}
@@ -499,72 +556,88 @@ export function SettingsForm({
         </label>
         <div className="form-row">
           <label>
+            Năm nhập học
+            <input
+              type="number"
+              min={2000}
+              max={2100}
+              required
+              value={year}
+              onChange={(e) => {
+                const y = Number(e.target.value);
+                setYear(y);
+                if (y >= 2000 && y <= 2100) {
+                  setTerms(academicSettings(y, years));
+                  setConfirmed([]);
+                }
+              }}
+            />
+          </label>
+          <label>
             Số năm học
             <select
               value={years}
               onChange={(e) => {
                 const n = Number(e.target.value);
                 setYears(n);
-                const d = defaults(year, month, n);
-                setTerms(d.map((s, i) => terms[i] || s));
+                setTerms(
+                  academicSettings(year, n).map((s, i) => terms[i] || s),
+                );
+                setConfirmed((prev) => prev.filter((i) => i < n * 2));
               }}
             >
               {[4, 5, 6].map((n) => (
                 <option key={n} value={n}>
-                  {n} năm · {n * 2} học kỳ
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Năm nhập học
-            <input
-              type="number"
-              required
-              min={2000}
-              max={2100}
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-            />
-          </label>
-          <label>
-            Tháng nhập học
-            <select
-              value={month}
-              onChange={(e) => setMonth(Number(e.target.value))}
-            >
-              {Array.from({ length: 12 }, (_, i) => (
-                <option key={i} value={i + 1}>
-                  Tháng {i + 1}
+                  {n} năm
                 </option>
               ))}
             </select>
           </label>
         </div>
-        <button
-          className="button"
-          type="button"
-          onClick={() => setTerms(defaults(year, month, years))}
-        >
-          Tạo lại các kỳ 6 tháng từ mốc nhập học
-        </button>
         <p className="muted small">
-          Chỉnh riêng từng kỳ bên dưới; có thể để khoảng nghỉ giữa hai kỳ. Đổi
-          số năm hoặc lịch không xóa mục tiêu và nhật ký.
+          Mẫu ước tính: HK1 tháng 8–1, HK2 tháng 2–6. Ngày bắt đầu luôn là thứ
+          Hai. Khi đổi ngày bắt đầu, ngày kết thúc dịch theo cùng thời lượng;
+          bạn vẫn có thể sửa ngày kết thúc.
         </p>
+        <div className="form-row">
+          <label>
+            Thức dậy
+            <input
+              type="time"
+              name="wake"
+              required
+              defaultValue={minuteClock(profile.wake_minutes ?? 420)}
+            />
+          </label>
+          <label>
+            Kết thúc ngày
+            <input
+              type="time"
+              name="sleep"
+              required
+              defaultValue={minuteClock(profile.sleep_minutes ?? 1380)}
+            />
+          </label>
+        </div>
         <div className="semester-settings">
           {terms.map((s, i) => (
-            <details key={i} open={i === 0 ? true : undefined}>
+            <details
+              key={i}
+              open={
+                todayKey() >= s.start && todayKey() <= s.end ? true : undefined
+              }
+            >
               <summary>
-                Năm {Math.floor(i / 2) + 1} · {s.label} · HK{i + 1}
+                Năm {Math.floor(i / 2) + 1} · {s.label} · HK{i + 1} ·{" "}
+                {confirmed.includes(i) ? "Đã xác nhận" : "Ước tính, chỉnh được"}
               </summary>
               <div className="form">
                 <label>
                   Tên học kỳ
                   <input
+                    value={s.label}
                     required
                     maxLength={80}
-                    value={s.label}
                     onChange={(e) => patch(i, { label: e.target.value })}
                   />
                 </label>
@@ -572,91 +645,67 @@ export function SettingsForm({
                   <DatePicker
                     label={`Bắt đầu HK${i + 1}`}
                     value={s.start}
-                    onChange={(start) => patch(i, { start })}
+                    onChange={(d) => patch(i, moveSemester(s, d))}
                   />
                   <DatePicker
                     label={`Kết thúc HK${i + 1}`}
                     value={s.end}
-                    onChange={(end) => patch(i, { end })}
                     min={s.start}
+                    onChange={(end) => patch(i, { end })}
                   />
                 </div>
-                {s.breaks.map((b, j) => (
-                  <div key={j} className="holiday-editor">
-                    <label>
-                      Tên kỳ nghỉ
-                      <input
-                        required
-                        maxLength={80}
-                        value={b.label}
-                        onChange={(e) =>
-                          patch(i, {
-                            breaks: s.breaks.map((h, k) =>
-                              k === j ? { ...h, label: e.target.value } : h,
-                            ),
-                          })
-                        }
-                      />
-                    </label>
-                    <div className="form-row">
-                      <DatePicker
-                        label="Nghỉ từ"
-                        value={b.start}
-                        onChange={(start) =>
-                          patch(i, {
-                            breaks: s.breaks.map((h, k) =>
-                              k === j ? { ...h, start } : h,
-                            ),
-                          })
-                        }
-                        min={s.start}
-                        max={s.end}
-                      />
-                      <DatePicker
-                        label="Nghỉ đến"
-                        value={b.end}
-                        onChange={(end) =>
-                          patch(i, {
-                            breaks: s.breaks.map((h, k) =>
-                              k === j ? { ...h, end } : h,
-                            ),
-                          })
-                        }
-                        min={b.start}
-                        max={s.end}
-                      />
-                    </div>
-                    <button
-                      className="text-button"
-                      type="button"
-                      onClick={() =>
-                        patch(i, { breaks: s.breaks.filter((_, k) => k !== j) })
-                      }
-                    >
-                      Xóa kỳ nghỉ
-                    </button>
-                  </div>
-                ))}
                 <button
-                  className="button"
                   type="button"
-                  disabled={s.breaks.length >= 30}
+                  className="text-button"
                   onClick={() =>
-                    patch(i, {
-                      breaks: [
-                        ...s.breaks,
-                        { label: "Nghỉ lễ", start: s.start, end: s.start },
-                      ],
-                    })
+                    setConfirmed((prev) => [...new Set([...prev, i])])
                   }
                 >
-                  <Plus size={15} />
-                  Thêm kỳ nghỉ
+                  Xác nhận ngày kỳ này
                 </button>
               </div>
             </details>
           ))}
         </div>
+        <button
+          type="button"
+          className="button"
+          onClick={() => {
+            const preset = {
+              study_years: years,
+              start_year: year,
+              semester_settings: terms,
+            };
+            try {
+              validateSemesterSettings(preset);
+              setError("");
+            } catch (e) {
+              setError(errorMessage(e));
+              return;
+            }
+            setShare(
+              window.location.origin +
+                "/?calendar=" +
+                encodeURIComponent(JSON.stringify(preset)),
+            );
+          }}
+        >
+          Tạo liên kết mẫu lịch cho bạn cùng trường
+        </button>
+        {share && (
+          <label>
+            Liên kết mẫu lịch
+            <textarea
+              readOnly
+              value={share}
+              onFocus={(e) => e.target.select()}
+            />
+            <small>
+              Liên kết chỉ chứa lịch học kỳ; không chứa tài khoản, mục tiêu hay
+              hoạt động.
+            </small>
+          </label>
+        )}
         {error && (
           <p className="form-error" role="alert">
             {error}

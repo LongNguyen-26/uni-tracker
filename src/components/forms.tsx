@@ -492,7 +492,21 @@ export function ActivityForm({
               type="datetime-local"
               step={1}
               value={start}
-              onChange={(e) => setStart(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                const span =
+                  start && end
+                    ? new Date(end).getTime() - new Date(start).getTime()
+                    : Math.max(1, activity?.duration_minutes || 60) * 60000;
+                setStart(next);
+                if (next && Number.isFinite(new Date(next).getTime()))
+                  setEnd(
+                    localDateTime(
+                      new Date(new Date(next).getTime() + span).toISOString(),
+                      true,
+                    ),
+                  );
+              }}
             />
           </label>
           <label>

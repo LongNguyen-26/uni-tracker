@@ -1,4 +1,6 @@
 import Papa from "papaparse";
+import { clockMinutes, minuteClock, isGreen } from "./schedule";
+import { parseDate } from "./timeline";
 import {
   addDays,
   CATEGORIES,
@@ -10,7 +12,8 @@ import {
 } from "./timeline";
 import { calculatedProgress, monday, validDate } from "./planning";
 
-export type ImportKind = "goal" | "session" | "activity" | "budget";
+export type ImportKind =
+  "goal" | "session" | "activity" | "budget" | "timetable";
 export type ImportRow = {
   key: string;
   kind: ImportKind;
@@ -26,6 +29,7 @@ export type ImportRow = {
   notes: string;
   goal: Partial<GoalInput>;
   activity?: Partial<ActivityInput>;
+  timetable?: { kind: "class" | "fixed"; semester_index: number };
   selected: boolean;
   issue: string;
 };
@@ -34,6 +38,7 @@ export const labels: Record<ImportKind, string> = {
   session: "Phiên học",
   activity: "Nhật ký",
   budget: "Quỹ giờ tuần",
+  timetable: "TKB / việc cố định",
 };
 const normalize = (s: string) =>
   s
@@ -69,6 +74,8 @@ const aliases: Record<string, string[]> = {
   target: ["target", "metrictarget", "mucdich"],
   unit: ["unit", "metricunit", "donvi"],
   color: ["color", "mau"],
+  timing: ["timingmode", "loaithoigian"],
+  reserved: ["reservedhours", "giugiotuan"],
 };
 export function importDate(value: unknown): string {
   const s = String(value ?? "").trim();
@@ -95,6 +102,11 @@ function row(
   }
   const requested = String(v.kind || kind);
   const kinds: Record<string, ImportKind> = {
+    timetable: "timetable",
+    tkb: "timetable",
+    class: "timetable",
+    fixed: "timetable",
+    lichcodinh: "timetable",
     goal: "goal",
     muctieu: "goal",
     session: "session",
@@ -146,6 +158,8 @@ function row(
   if (v.target !== undefined) goal.metric_target = Number(v.target);
   if (v.unit) goal.metric_unit = String(v.unit);
   if (v.color) goal.color = String(v.color);
+  if (v.timing) goal.timing_mode = String(v.timing) as Goal["timing_mode"];
+  if (v.reserved) goal.reserved_hours = Number(v.reserved);
   return {
     key: `row-${index}`,
     kind,
@@ -162,6 +176,13 @@ function row(
     goal_ref: "",
     notes: String(v.notes ?? ""),
     goal,
+    timetable:
+      kind === "timetable"
+        ? {
+            kind: normalize(requested) === "fixed" ? "fixed" : "class",
+            semester_index: Number(input.semester_index || 0),
+          }
+        : undefined,
     selected: true,
     issue: kinds[normalize(requested)]
       ? ""
@@ -269,6 +290,29 @@ export function parseJson(
     r.goal_id = "";
     rows.push(r);
   }
+  for (const t of data.timetable_entries || []) {
+    const r = row(
+      {
+        ...t,
+        kind: "timetable",
+        date: t.valid_from,
+        end_date: t.valid_until,
+        start_time: minuteClock(t.start_minute),
+        end_time: minuteClock(t.end_minute),
+      },
+      "timetable",
+      anchor,
+      rows.length,
+    );
+    const from = String(t.valid_from);
+    r.date = addDays(monday(from), Number(t.weekday));
+    if (r.date < from) r.date = addDays(r.date, 7);
+    r.timetable = {
+      kind: t.kind === "fixed" ? "fixed" : "class",
+      semester_index: Number(t.semester_index || 0),
+    };
+    rows.push(r);
+  }
   for (const b of data.budgets || []) {
     const r = row(
       {
@@ -310,7 +354,7 @@ export function validateImportRow(
     !r.goal_id
   )
     return "Mục tiêu gốc chưa được chọn nhập. Hãy chọn lại liên kết.";
-  if (r.kind === "session") {
+  if (r.kind === "session" || r.kind === "timetable") {
     if (
       !/^([01]\d|2[0-3]):[0-5]\d$/.test(r.start_time) ||
       !/^([01]\d|2[0-3]):[0-5]\d$/.test(r.end_time)
@@ -320,7 +364,18 @@ export function validateImportRow(
       (new Date(`${r.end_date}T${r.end_time}`).getTime() -
         new Date(`${r.date}T${r.start_time}`).getTime()) /
       60000;
-    if (mins < 1 || mins > 1440) return "Phiên cần từ 1 phút đến 24 giờ.";
+    if (r.kind === "timetable") {
+      if (
+        (Date.parse(r.end_date) - Date.parse(r.date)) / 86400000 > 730 ||
+        !Number.isInteger(r.timetable?.semester_index ?? 0) ||
+        (r.timetable?.semester_index ?? 0) < 0 ||
+        (r.timetable?.semester_index ?? 0) > 11
+      )
+        return "TKB cần học kỳ hợp lệ và khoảng áp dụng tối đa 730 ngày.";
+      if (clockMinutes(r.end_time) <= clockMinutes(r.start_time))
+        return "Lịch cố định cần kết thúc sau bắt đầu trong cùng ngày.";
+    } else if (mins < 1 || mins > 1440)
+      return "Phiên cần từ 1 phút đến 24 giờ.";
   }
   if (
     r.kind === "activity" &&
@@ -340,7 +395,21 @@ export function validateImportRow(
   )
     return "Quỹ giờ cần mục tiêu, ngày thứ Hai và 0–10080 phút.";
   if (r.kind === "goal") {
+    if (
+      r.goal.timing_mode &&
+      !["fixed", "window", "flexible"].includes(r.goal.timing_mode)
+    )
+      return "Loại thời gian cột mốc không hợp lệ.";
+    if (
+      r.goal.reserved_hours !== undefined &&
+      (!Number.isFinite(r.goal.reserved_hours) ||
+        r.goal.reserved_hours < 0 ||
+        r.goal.reserved_hours > 168)
+    )
+      return "Quỹ giờ giữ lại cần từ 0–168 giờ/tuần.";
     const g = goalPayload(r);
+    if (isGreen(g.color))
+      return "Chọn màu khác xanh lá; xanh lá dành cho thương hiệu.";
     if (
       !["numeric", "checklist", "milestone", "progress"].includes(
         g.tracking_mode,
@@ -385,6 +454,8 @@ export function goalPayload(r: ImportRow): GoalInput {
     color: x.color || GOAL_COLORS[0],
     tracking_mode: x.tracking_mode || "milestone",
     starts_on: r.date === r.end_date ? null : r.date,
+    timing_mode: x.timing_mode || (r.date === r.end_date ? "fixed" : "window"),
+    reserved_hours: x.reserved_hours || 0,
     deadline: r.end_date,
     semester_index: x.semester_index ?? null,
     metric_current: x.metric_current ?? 0,
@@ -414,6 +485,17 @@ export function importPayload(rows: ImportRow[]) {
             notes: r.notes,
             date: r.date,
             minutes: Number(r.minutes) || 0,
+            ...(r.kind === "timetable"
+              ? {
+                  weekday: (parseDate(r.date).getDay() + 6) % 7,
+                  start_minute: clockMinutes(r.start_time),
+                  end_minute: clockMinutes(r.end_time),
+                  valid_from: r.date,
+                  valid_until: r.end_date,
+                  semester_index: r.timetable?.semester_index || 0,
+                  schedule_kind: r.timetable?.kind || "class",
+                }
+              : {}),
             ...(r.kind === "activity"
               ? {
                   color: r.activity?.color || "#237a4b",
@@ -462,7 +544,12 @@ export function repeatImport(
     for (let i = 0; i < count; i++) {
       const date = validDate(r.date) ? addDays(r.date, i * 7) : r.date,
         end_date = validDate(r.end_date)
-          ? addDays(r.end_date, i * 7)
+          ? addDays(
+              r.end_date,
+              r.kind === "timetable" && r.end_date === r.date
+                ? weeks * 7 - 1
+                : i * 7,
+            )
           : r.end_date;
       if (
         skip &&
