@@ -24,6 +24,28 @@ Production: https://uni-tracker-sigma.vercel.app · GitHub: https://github.com/L
 | `803b160` | Flexible 4/5/6-year calendars, date picker/ranges, numeric/checklist goals, avatar, editable activity history, weekly hour budgets, persistent timer with review, atomic reviewed imports (Excel/CSV/Docs/JSON/ICS/PDF/OCR). Added 3 additive Supabase migrations. | READY — `dpl_9zszSXCD2jUe49Z21py4T9vwuxqU`; production alias verified |
 | `7794f95` | Unified academic grid; recurring school/fixed timetable; weekly free-slot proposals with exam-hour reserves; journal filters; Monday calendars and shared presets; safe recovery of missing profiles. Added the timetable migration. | READY — `dpl_Ew8cLzXAChgkJoVDP7BBr3zoQEiP`; production alias and authenticated data verified on 2026-09-08 |
 | `docs: record deployment 7794f95` (2026-09-08; documentation-only push) | Records the verified release and cleanup below. | No application changes; the AGENTS-only delivery record is configured to skip the build and retain `7794f95`. |
+| `c892f48` (2026-09-08; pushed to `codex/guided-import`, then fast-forwarded to `main`) | Guided preparation and AI prompt/template; optional numeric/checklist measures; dependency-aware grouped partial imports; all-day windows, duration-only intentions and goal weekly hours. Goal dates mark the deadline/event window, including short approximate windows. | Preview READY — `dpl_41VHhTv8QdvbMaqi2CjxnKn8rs1G`; Production READY — `dpl_9UQ15RcJnPeSk3AGge1zLn7RBHx8`; production alias verified, HTTP 200. |
+| `docs: record deployment c892f48` (2026-09-08; documentation-only push) | Records both verified deployments, validation and QA cleanup. | No application changes; AGENTS-only delivery record retains production `c892f48`. |
+
+### Release validation `c892f48` — 2026-09-08
+
+- User explicitly authorized production database changes after the initial automatic approval rejection. Applied additive migration `20260908041254_guided_import_and_goal_measures.sql`; existing records were retained.
+- 45 unit tests, typecheck, lint and production build passed. Rebuilt a clean local PostgreSQL database from all migrations and passed all five SQL rollback suites (database, focus, planning, schedule, reviewed import). The new reviewed-import rollback suite also passed on Supabase after migration.
+- The supplied CSV parsed as 31 source rows plus 4 visible generated goals, with all 35 rows valid. Personal source data was not committed or imported into production.
+- Preview smoke test used one disposable account and one mixed import flow. Preparation confirmed only the current term, copy prompt showed success, grouped review imported 6 valid rows and retained 1 invalid row. A single deadline displayed one date; a 3-day event and a 14-day estimated window displayed their own dates; a conference retained 2027-08-18 through 2027-08-22 with no time inputs. The weekly view showed the imported 30-minute unscheduled intention and 25 actual minutes. SQL verified the goal link on the all-day window. No browser console errors or warnings were reported on the app.
+- The integrated browser tool could not initialize after resumption; Playwright CLI completed the Preview smoke test. Clipboard read permission was denied to automation, while the app's write operation reported success.
+- Vercel confirmed production READY for full commit `c892f48af61e18fd57c0f13bcce4312c9591ba61`, with `uni-tracker-sigma.vercel.app` assigned and no alias error. The production URL returned HTTP 200; the Vercel runtime error scan for the preceding hour was clean. Build duration was approximately 21 seconds. Security advisor findings remained limited to the existing disabled leaked-password protection setting.
+- Removed the disposable Supabase QA account and cascaded data, verified zero remaining QA users/goals/sessions, removed local QA credential and temporary browser files, and stopped the local test database.
+
+### Current import and goal decisions
+
+- Public import choices are Mục tiêu, Lịch cố định and Hoạt động; planned/completed is the activity status. Legacy export formats remain readable. Fixed commitments reserve time; links to goals inform their weekly allocation without fabricating completed work.
+- New goals can have no measure, a numeric target or a checklist. Weekly hours belong to the goal and can be overridden for an individual week.
+- A goal's dates mark its deadline or event window, never an automatic span from today or the start of the semester. A fixed deadline uses one date; a Hackathon can use its three event dates; a vague late-month deadline uses a clearly labelled 7–14-day approximate window. Selecting the semester does not change these dates.
+
+### Known issues
+
+- The weekly summary labelled “Ý định trong tuần” reflects weekly goal budgets; imported activities without a weekly budget still appear in the schedule while that summary can remain zero. This existing label/summary distinction is non-blocking and was left for a separate change.
 
 ### Current product direction (user update after `803b160`)
 
