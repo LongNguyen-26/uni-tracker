@@ -30,6 +30,8 @@ export type TimetableEntry = {
   valid_from: string;
   valid_until: string;
   notes: string;
+  goal_id?: string | null;
+  all_day?: boolean;
 };
 export type TimetableInput = Omit<TimetableEntry, "id" | "user_id">;
 export type TimeSlot = { day: string; start: number; end: number };
@@ -133,7 +135,10 @@ export function isGreen(color: string) {
 export function timetableOnDay(entries: TimetableEntry[], day: string) {
   const weekday = (parseDate(day).getDay() + 6) % 7;
   return entries.filter(
-    (e) => e.weekday === weekday && day >= e.valid_from && day <= e.valid_until,
+    (e) =>
+      (e.all_day || e.weekday === weekday) &&
+      day >= e.valid_from &&
+      day <= e.valid_until,
   );
 }
 export function mergeIntervals(intervals: { start: number; end: number }[]) {
@@ -167,6 +172,7 @@ export function weekCapacity(
     }));
     fixed += mergeIntervals(blocks).reduce((n, b) => n + b.end - b.start, 0);
     for (const s of sessionsOnDay(sessions, day)) {
+      if (s.is_unscheduled) continue;
       const a = localDateTime(s.scheduled_start),
         b = localDateTime(s.scheduled_end);
       blocks.push({
@@ -254,14 +260,26 @@ export function distributeWeek(
   for (const g of goals
     .filter((g) => g.progress < 100)
     .sort((a, b) => a.deadline.localeCompare(b.deadline))) {
-    const already = sessions
-      .filter(
-        (s) =>
-          s.goal_id === g.id &&
-          localDateTime(s.scheduled_start).slice(0, 10) >= week &&
-          localDateTime(s.scheduled_start).slice(0, 10) <= addDays(week, 6),
-      )
-      .reduce((n, s) => n + s.planned_minutes, 0);
+    const fixedForGoal = daysForWeek(week).reduce(
+      (n, day) =>
+        n +
+        mergeIntervals(
+          timetableOnDay(entries, day)
+            .filter((e) => e.goal_id === g.id && !e.all_day)
+            .map((e) => ({ start: e.start_minute, end: e.end_minute })),
+        ).reduce((m, interval) => m + interval.end - interval.start, 0),
+      0,
+    );
+    const already =
+      fixedForGoal +
+      sessions
+        .filter(
+          (s) =>
+            s.goal_id === g.id &&
+            localDateTime(s.scheduled_start).slice(0, 10) >= week &&
+            localDateTime(s.scheduled_start).slice(0, 10) <= addDays(week, 6),
+        )
+        .reduce((n, s) => n + s.planned_minutes, 0);
     let need = Math.max(0, Math.round((hours[g.id] || 0) * 60) - already);
     while (need >= 15 && remaining >= 15) {
       const perDay = new Map<string, number>();
@@ -303,6 +321,8 @@ export function distributeWeek(
   }
   return { sessions: rows, unallocated };
 }
+const daysForWeek = (week: string) =>
+  Array.from({ length: 7 }, (_, i) => addDays(week, i));
 export function dayVisual(
   day: string,
   goals: Goal[],

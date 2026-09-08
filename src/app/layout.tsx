@@ -4,6 +4,7 @@ import "./globals.css";
 import "./focus.css";
 import "./planning.css";
 import "./schedule.css";
+import "./import.css";
 
 const vietnam = Be_Vietnam_Pro({
   variable: "--font-vietnam",

@@ -23,6 +23,7 @@ export type FocusSession = {
   notes: string;
   scheduled_start: string;
   scheduled_end: string;
+  is_unscheduled?: boolean;
   planned_minutes: number;
   timezone: string;
   elapsed_seconds: number;
@@ -40,17 +41,20 @@ export type SessionInput = Pick<
   | "scheduled_end"
   | "planned_minutes"
   | "timezone"
+  | "is_unscheduled"
 >;
 export const goalProgressText = (goal: Goal) =>
-  goal.tracking_mode === "numeric"
-    ? `${goal.metric_current} → ${goal.metric_target}${goal.metric_unit ? ` ${goal.metric_unit}` : ""}`
-    : goal.tracking_mode === "checklist"
-      ? `${goal.checklist.filter((s) => s.done).length}/${goal.checklist.length} cột mốc`
-      : goal.tracking_mode === "milestone"
-        ? goal.progress === 100
-          ? "Đã đạt"
-          : "Chưa đạt"
-        : `${goal.progress}%`;
+  goal.tracking_mode === "none"
+    ? "Chưa đặt thước đo"
+    : goal.tracking_mode === "numeric"
+      ? `${goal.metric_current} → ${goal.metric_target}${goal.metric_unit ? ` ${goal.metric_unit}` : ""}`
+      : goal.tracking_mode === "checklist"
+        ? `${goal.checklist.filter((s) => s.done).length}/${goal.checklist.length} cột mốc`
+        : goal.tracking_mode === "milestone"
+          ? goal.progress === 100
+            ? "Đã đạt"
+            : "Chưa đạt"
+          : `${goal.progress}%`;
 export function calculatedProgress(
   goal: Pick<
     Goal,
@@ -62,6 +66,7 @@ export function calculatedProgress(
     | "progress"
   >,
 ) {
+  if (goal.tracking_mode === "none") return goal.progress === 100 ? 100 : 0;
   if (goal.tracking_mode === "numeric")
     return (
       goal.metric_direction === "decrease"

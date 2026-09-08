@@ -8,6 +8,7 @@ export type Profile = {
   wake_minutes?: number;
   sleep_minutes?: number;
   confirmed_semesters?: number[];
+  preparation_done?: boolean;
 };
 export type Goal = {
   id: string;
@@ -16,7 +17,8 @@ export type Goal = {
   description: string;
   category: string;
   color: string;
-  tracking_mode: "progress" | "milestone" | "numeric" | "checklist";
+  tracking_mode: "none" | "progress" | "milestone" | "numeric" | "checklist";
+  weekly_hours?: number;
   starts_on: string | null;
   timing_mode?: "fixed" | "window" | "flexible";
   reserved_hours?: number;
@@ -71,6 +73,7 @@ export type GoalInput = Pick<
   | "checklist"
   | "timing_mode"
   | "reserved_hours"
+  | "weekly_hours"
 >;
 export type ActivityInput = Pick<
   Activity,

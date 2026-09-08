@@ -5,6 +5,7 @@ import {
   addDays,
   CATEGORIES,
   GOAL_COLORS,
+  todayKey,
   type Goal,
   type GoalInput,
   type ActivityInput,
@@ -32,13 +33,20 @@ export type ImportRow = {
   timetable?: { kind: "class" | "fixed"; semester_index: number };
   selected: boolean;
   issue: string;
+  status?: "planned" | "completed";
+  explicit_end?: boolean;
+  all_day?: boolean;
+  generated?: boolean;
+  source_error?: string;
+  warning?: string;
+  server_error?: string;
 };
 export const labels: Record<ImportKind, string> = {
   goal: "Mục tiêu",
-  session: "Phiên học",
-  activity: "Nhật ký",
+  session: "Hoạt động",
+  activity: "Hoạt động",
   budget: "Quỹ giờ tuần",
-  timetable: "TKB / việc cố định",
+  timetable: "Lịch cố định",
 };
 const normalize = (s: string) =>
   s
@@ -76,6 +84,10 @@ const aliases: Record<string, string[]> = {
   color: ["color", "mau"],
   timing: ["timingmode", "loaithoigian"],
   reserved: ["reservedhours", "giugiotuan"],
+  weekly_hours: ["weeklyhours", "giomoituan", "quygiotuan"],
+  checklist: ["checklist", "steps", "cacbuoc", "danhsachviec"],
+  status: ["status", "trangthai"],
+  direction: ["metricdirection", "direction"],
 };
 export function importDate(value: unknown): string {
   const s = String(value ?? "").trim();
@@ -100,7 +112,14 @@ function row(
     const k = Object.keys(aliases).find((k) => aliases[k].includes(n));
     if (k) v[k] = val;
   }
-  const requested = String(v.kind || kind);
+  const requested = String(
+    v.kind ||
+      (v.weekday
+        ? "timetable"
+        : !v.date && (v.target || v.checklist || v.weekly_hours)
+          ? "goal"
+          : kind),
+  );
   const kinds: Record<string, ImportKind> = {
     timetable: "timetable",
     tkb: "timetable",
@@ -112,6 +131,7 @@ function row(
     session: "session",
     phienhoc: "session",
     activity: "activity",
+    hoatdong: "session",
     nhatky: "activity",
     budget: "budget",
     quygiotuan: "budget",
@@ -151,15 +171,41 @@ function row(
     };
     if (d in weekdays) date = addDays(monday(anchor), weekdays[d]);
   }
-  if (!date && kind === "goal") date = importDate(v.end_date);
+  const missingGoalDate = !date && kind === "goal";
+  if (missingGoalDate) date = importDate(v.end_date) || todayKey();
   const goal: Partial<GoalInput> = {};
   if (v.mode) goal.tracking_mode = String(v.mode) as Goal["tracking_mode"];
-  if (v.current !== undefined) goal.metric_current = Number(v.current);
-  if (v.target !== undefined) goal.metric_target = Number(v.target);
+  if (v.current !== undefined && v.current !== "")
+    goal.metric_current = Number(v.current);
+  if (v.target !== undefined && v.target !== "")
+    goal.metric_target = Number(v.target);
   if (v.unit) goal.metric_unit = String(v.unit);
   if (v.color) goal.color = String(v.color);
   if (v.timing) goal.timing_mode = String(v.timing) as Goal["timing_mode"];
   if (v.reserved) goal.reserved_hours = Number(v.reserved);
+  if (v.weekly_hours !== undefined && v.weekly_hours !== "")
+    goal.weekly_hours = Number(v.weekly_hours);
+  if (v.direction)
+    goal.metric_direction = String(v.direction) as Goal["metric_direction"];
+  if (v.checklist) {
+    const steps = Array.isArray(v.checklist)
+      ? v.checklist
+      : String(v.checklist)
+          .split("|")
+          .filter((s) => s.trim());
+    goal.checklist = steps.map((s, i) =>
+      typeof s === "string"
+        ? { id: `step-${i}`, title: s.trim(), done: false }
+        : (s as Goal["checklist"][number]),
+    );
+  }
+  // The measure is inferred from data. Empty legacy mode columns never force a fake measure.
+  goal.tracking_mode = goal.checklist?.length
+    ? "checklist"
+    : goal.metric_current !== undefined && goal.metric_target !== undefined
+      ? "numeric"
+      : "none";
+  const status = normalize(String(v.status || ""));
   return {
     key: `row-${index}`,
     kind,
@@ -168,10 +214,8 @@ function row(
     end_date: importDate(v.end_date) || date,
     start_time: time(v.start_time),
     end_time: time(v.end_time),
-    minutes: String(
-      v.minutes ?? (v.hours !== undefined ? Number(v.hours) * 60 : ""),
-    ),
-    goal_id: String(v.goal_id ?? ""),
+    minutes: String(v.minutes || (v.hours ? Number(v.hours) * 60 : "")),
+    goal_id: kind === "goal" ? "" : String(v.goal_id ?? ""),
     ref: String(input.id || ""),
     goal_ref: "",
     notes: String(v.notes ?? ""),
@@ -187,6 +231,28 @@ function row(
     issue: kinds[normalize(requested)]
       ? ""
       : `Loại “${requested}” chưa được hỗ trợ.`,
+    status: ["planned", "dudinh"].includes(status)
+      ? "planned"
+      : ["completed", "done", "daxong", "dahoanthanh"].includes(status)
+        ? "completed"
+        : undefined,
+    source_error:
+      status &&
+      ![
+        "planned",
+        "dudinh",
+        "completed",
+        "done",
+        "daxong",
+        "dahoanthanh",
+      ].includes(status)
+        ? "Cột status cần planned (dự định) hoặc completed (đã xong)."
+        : undefined,
+    explicit_end: Boolean(v.end_date),
+    all_day: kind === "timetable" && !v.start_time && !v.end_time,
+    warning: missingGoalDate
+      ? `Cột date trống — dùng ${date}${v.end_date ? " theo hạn hoàn thành" : "; có thể sửa trước khi nhập"}.`
+      : undefined,
   };
 }
 export function parseTable(
@@ -194,23 +260,31 @@ export function parseTable(
   kind: ImportKind,
   anchor: string,
 ): ImportRow[] {
-  const result = Papa.parse<Record<string, string>>(
-    text.trim().replace(/^\uFEFF/, ""),
-    {
-      header: true,
-      skipEmptyLines: "greedy",
-      transformHeader: (h) => h.trim(),
-    },
-  );
-  if (result.errors.some((e) => e.code !== "UndetectableDelimiter"))
-    throw new Error(`Bảng chưa đúng định dạng: ${result.errors[0].message}`);
+  let source = text.trim().replace(/^\uFEFF/, "");
+  // Some pasted exports wrap the entire CSV in a pair of quotes.
+  if (source.startsWith('"title,') && source.endsWith('\n"'))
+    source = source.slice(1, -1).trim();
+  const result = Papa.parse<Record<string, string>>(source, {
+    header: true,
+    skipEmptyLines: "greedy",
+    transformHeader: (h) => h.trim(),
+  });
   if (!result.meta.fields?.some((f) => aliases.title.includes(normalize(f))))
     throw new Error(
       "Cần hàng tiêu đề có cột title hoặc Tên hoạt động. Dùng bảng mẫu bên dưới để sửa nội dung.",
     );
   if (result.data.length > 500)
     throw new Error("Mỗi lần nhập tối đa 500 dòng.");
-  return result.data.map((r, i) => row(r, kind, anchor, i));
+  return result.data.map((r, i) => {
+    const parsed = row(r, kind, anchor, i);
+    const error = result.errors.find(
+      (e) => e.row === i && e.code !== "UndetectableDelimiter",
+    );
+    if (error)
+      parsed.source_error =
+        "Số cột hoặc dấu ngoặc kép chưa khớp. Kiểm tra dòng này trong file nguồn.";
+    return parsed;
+  });
 }
 export function parseJson(
   text: string,
@@ -242,9 +316,24 @@ export function parseJson(
       metric_direction: g.metric_direction,
       checklist: g.checklist,
       milestone_kind: g.milestone_kind,
+      weekly_hours: g.weekly_hours,
+      timing_mode: g.timing_mode,
+      reserved_hours: g.reserved_hours,
       completed_on: g.completed_on,
       semester_index: g.semester_index,
     };
+    if (g.tracking_mode === "milestone") {
+      r.goal.checklist = [
+        { id: "completion", title: g.title, done: g.progress === 100 },
+      ];
+    }
+    r.goal.tracking_mode = ["none", "progress"].includes(g.tracking_mode)
+      ? "none"
+      : r.goal.checklist?.length
+        ? "checklist"
+        : g.metric_current !== undefined && g.metric_target !== undefined
+          ? "numeric"
+          : "none";
     r.ref = g.id || "";
     rows.push(r);
   }
@@ -261,6 +350,7 @@ export function parseJson(
       ended_at: a.ended_at,
       occurred_on: a.occurred_on,
     };
+    r.status = "completed";
     rows.push(r);
   }
   for (const s of data.sessions || []) {
@@ -288,6 +378,12 @@ export function parseJson(
     );
     r.goal_ref = s.goal_id || "";
     r.goal_id = "";
+    r.status = "planned";
+    if (s.is_unscheduled) {
+      r.start_time = "";
+      r.end_time = "";
+      r.minutes = String(s.planned_minutes);
+    }
     rows.push(r);
   }
   for (const t of data.timetable_entries || []) {
@@ -311,6 +407,13 @@ export function parseJson(
       kind: t.kind === "fixed" ? "fixed" : "class",
       semester_index: Number(t.semester_index || 0),
     };
+    r.goal_ref = t.goal_id || "";
+    r.all_day = Boolean(t.all_day);
+    if (r.all_day) {
+      r.date = t.valid_from;
+      r.start_time = "";
+      r.end_time = "";
+    }
     rows.push(r);
   }
   for (const b of data.budgets || []) {
@@ -339,22 +442,57 @@ export function validateImportRow(
   rows: ImportRow[],
   today: string,
 ) {
+  if (r.server_error || r.source_error)
+    return r.server_error || r.source_error || "";
   if (r.issue.startsWith("Loại “")) return r.issue;
   if (!r.title.trim() || r.title.length > 160)
     return "Tên phải có 1–160 ký tự.";
-  if (!validDate(r.date) || !validDate(r.end_date) || r.end_date < r.date)
-    return "Kiểm tra ngày bắt đầu/kết thúc (năm-tháng-ngày).";
+  if (!r.date)
+    return "Cột date trống — nhập ngày YYYY-MM-DD hoặc thứ trong tuần.";
+  if (!validDate(r.date))
+    return `Ngày bắt đầu “${r.date}” không tồn tại; dùng YYYY-MM-DD.`;
+  if (!validDate(r.end_date))
+    return `Ngày kết thúc “${r.end_date}” không tồn tại; dùng YYYY-MM-DD.`;
+  if (r.end_date < r.date)
+    return `Ngày kết thúc ${r.end_date} sớm hơn ngày bắt đầu ${r.date}.`;
+  if (r.notes.length > 4000) return "Ghi chú tối đa 4.000 ký tự.";
   if (r.goal_id && !goals.some((g) => g.id === r.goal_id))
     return "Hãy chọn mục tiêu liên kết.";
   if (
     r.goal_ref &&
     !rows.some(
-      (x) => x.kind === "goal" && x.ref === r.goal_ref && x.selected,
+      (x) =>
+        x.kind === "goal" &&
+        x.ref === r.goal_ref &&
+        x.selected &&
+        !validateImportRow(x, goals, [], today),
     ) &&
     !r.goal_id
   )
-    return "Mục tiêu gốc chưa được chọn nhập. Hãy chọn lại liên kết.";
-  if (r.kind === "session" || r.kind === "timetable") {
+    return "Mục tiêu gốc chưa được chọn nhập hoặc còn lỗi. Sửa mục tiêu trước, hoặc đổi liên kết.";
+  if (r.kind === "timetable" && r.all_day)
+    return (Date.parse(r.end_date) - Date.parse(r.date)) / 86400000 > 730
+      ? "Lịch cả ngày tối đa 730 ngày."
+      : "";
+  if (
+    (r.kind === "session" || r.kind === "activity") &&
+    !r.start_time &&
+    !r.end_time
+  ) {
+    if (
+      !r.minutes ||
+      !Number.isFinite(Number(r.minutes)) ||
+      Number(r.minutes) < 1 ||
+      Number(r.minutes) > 1440 ||
+      (r.kind === "session" && !Number.isInteger(Number(r.minutes)))
+    )
+      return "Cột minutes cần 1–1440 phút, hoặc điền cả start_time và end_time; dự định dùng số phút nguyên.";
+  }
+  if (
+    r.kind === "timetable" ||
+    ((r.kind === "session" || r.kind === "activity") &&
+      (r.start_time || r.end_time))
+  ) {
     if (
       !/^([01]\d|2[0-3]):[0-5]\d$/.test(r.start_time) ||
       !/^([01]\d|2[0-3]):[0-5]\d$/.test(r.end_time)
@@ -375,7 +513,14 @@ export function validateImportRow(
       if (clockMinutes(r.end_time) <= clockMinutes(r.start_time))
         return "Lịch cố định cần kết thúc sau bắt đầu trong cùng ngày.";
     } else if (mins < 1 || mins > 1440)
-      return "Phiên cần từ 1 phút đến 24 giờ.";
+      return "Hoạt động cần kết thúc sau bắt đầu, trong khoảng 1 phút–24 giờ.";
+    if (
+      r.minutes &&
+      (!Number.isFinite(Number(r.minutes)) ||
+        Number(r.minutes) < 1 ||
+        Number(r.minutes) > mins)
+    )
+      return "Số phút thực làm phải lớn hơn 0 và không vượt khung giờ.";
   }
   if (
     r.kind === "activity" &&
@@ -384,7 +529,7 @@ export function validateImportRow(
       Number(r.minutes) < 0 ||
       Number(r.minutes) > 1440)
   )
-    return "Nhật ký không ở tương lai, thời lượng 0–1440 phút.";
+    return "Hoạt động đã xong cần ngày không ở tương lai; đổi trạng thái thành Dự định nếu đây là kế hoạch.";
   if (
     r.kind === "budget" &&
     ((!r.goal_id && !r.goal_ref) ||
@@ -408,10 +553,21 @@ export function validateImportRow(
     )
       return "Quỹ giờ giữ lại cần từ 0–168 giờ/tuần.";
     const g = goalPayload(r);
+    if (
+      (g.weekly_hours ?? 0) < 0 ||
+      (g.weekly_hours ?? 0) > 168 ||
+      !Number.isFinite(g.weekly_hours ?? 0)
+    )
+      return "Quỹ giờ mục tiêu cần từ 0–168 giờ mỗi tuần.";
+    if (
+      (r.goal.metric_current !== undefined) !==
+      (r.goal.metric_target !== undefined)
+    )
+      return "Thước đo bằng số cần cả current và target; có thể xóa cả hai để đặt sau.";
     if (isGreen(g.color))
       return "Chọn màu khác xanh lá; xanh lá dành cho thương hiệu.";
     if (
-      !["numeric", "checklist", "milestone", "progress"].includes(
+      !["none", "numeric", "checklist", "milestone", "progress"].includes(
         g.tracking_mode,
       )
     )
@@ -432,7 +588,7 @@ export function validateImportRow(
     )
       return "Kiểm tra tên và trạng thái các bước dự án.";
     if (g.tracking_mode === "checklist" && !g.checklist.length)
-      return "Dự án cần ít nhất một cột mốc; bổ sung trong JSON nguồn.";
+      return "Thêm ít nhất một việc trong danh sách, hoặc chọn Đặt thước đo sau.";
     if (
       g.progress < 0 ||
       g.progress > 100 ||
@@ -452,7 +608,8 @@ export function goalPayload(r: ImportRow): GoalInput {
     description: r.notes,
     category: x.category || CATEGORIES[0],
     color: x.color || GOAL_COLORS[0],
-    tracking_mode: x.tracking_mode || "milestone",
+    tracking_mode: x.tracking_mode || "none",
+    weekly_hours: x.weekly_hours ?? 0,
     starts_on: r.date === r.end_date ? null : r.date,
     timing_mode: x.timing_mode || (r.date === r.end_date ? "fixed" : "window"),
     reserved_hours: x.reserved_hours || 0,
@@ -470,11 +627,111 @@ export function goalPayload(r: ImportRow): GoalInput {
   g.progress = calculatedProgress(g);
   return g;
 }
+const goalName = (value: string) =>
+  value.trim().normalize("NFC").toLocaleLowerCase("vi-VN").replace(/\s+/g, " ");
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Resolve dependencies before preview; never turn an unknown UUID into a goal title. */
+export function prepareImportRows(
+  input: ImportRow[],
+  goals: Goal[],
+  today: string,
+): ImportRow[] {
+  const rows = input.map((r) => ({ ...r, goal: { ...r.goal } }));
+  rows
+    .filter((r) => r.kind === "goal")
+    .forEach((r) => {
+      r.ref ||= `import:${r.key}`;
+    });
+  for (const r of rows) {
+    if (r.kind === "goal") {
+      const matches = goals.filter(
+        (g) => goalName(g.title) === goalName(r.title),
+      );
+      if (matches.length === 1) {
+        r.selected = false;
+        r.issue = "Mục tiêu đã có; các dòng liên quan dùng mục tiêu này.";
+      }
+      continue;
+    }
+    const link = (r.goal_id || r.goal_ref).trim();
+    if (link) {
+      const existing = goals.filter(
+        (g) => g.id === link || goalName(g.title) === goalName(link),
+      );
+      const incoming = rows.filter(
+        (g) =>
+          g.kind === "goal" &&
+          (g.ref === link || goalName(g.title) === goalName(link)),
+      );
+      if (existing.length > 1 || incoming.length > 1) {
+        r.source_error = `Có nhiều mục tiêu tên “${link}”. Chọn chính xác mục tiêu liên kết.`;
+      } else if (existing.length === 1) {
+        r.goal_id = existing[0].id;
+        r.goal_ref = "";
+      } else if (incoming.length === 1) {
+        const saved = goals.filter(
+          (g) => goalName(g.title) === goalName(incoming[0].title),
+        );
+        r.goal_id = saved.length === 1 ? saved[0].id : "";
+        r.goal_ref = r.goal_id ? "" : incoming[0].ref;
+      } else if (!uuid.test(link) && !r.goal_ref) {
+        const created = row(
+          { title: link, kind: "goal", date: today },
+          "goal",
+          today,
+          rows.length,
+        );
+        created.key = `auto-${rows.length}`;
+        created.ref = `import:${created.key}`;
+        created.generated = true;
+        created.warning =
+          "Tạo từ tên liên kết; chưa đặt thước đo. Hạn đang dùng hôm nay, có thể sửa tại đây.";
+        rows.push(created);
+        r.goal_id = "";
+        r.goal_ref = created.ref;
+      } else {
+        r.goal_id = "";
+        r.goal_ref = link;
+      }
+    }
+    if (r.kind === "session" || r.kind === "activity") {
+      r.status ||= r.date < today ? "completed" : "planned";
+      r.kind = r.status === "completed" ? "activity" : "session";
+    }
+  }
+  // Old budget exports remain importable, but the review presents hours on their goal.
+  for (const b of rows.filter((r) => r.kind === "budget")) {
+    const g = rows.find((r) => r.kind === "goal" && r.ref === b.goal_ref);
+    if (g) {
+      g.goal.weekly_hours = Number(b.minutes) / 60;
+      b.selected = false;
+      b.warning = "Quỹ giờ đã chuyển vào mục tiêu.";
+    }
+  }
+  if (rows.length > 500)
+    throw new Error("Tối đa 500 dòng, tính cả mục tiêu tạo từ tên liên kết.");
+  return rows.sort(
+    (a, b) => Number(b.kind === "goal") - Number(a.kind === "goal"),
+  );
+}
+
+export function validImportRows(
+  rows: ImportRow[],
+  goals: Goal[],
+  today: string,
+) {
+  return rows.filter(
+    (r) => r.selected && !validateImportRow(r, goals, rows, today),
+  );
+}
+
 export function importPayload(rows: ImportRow[]) {
   return rows
     .filter((r) => r.selected)
     .map((r) => ({
       kind: r.kind,
+      row_key: r.key,
       ref: r.ref,
       goal_ref: r.goal_id ? "" : r.goal_ref,
       goal_id: r.goal_id || null,
@@ -484,12 +741,19 @@ export function importPayload(rows: ImportRow[]) {
             title: r.title.trim(),
             notes: r.notes,
             date: r.date,
-            minutes: Number(r.minutes) || 0,
+            minutes:
+              Number(r.minutes) ||
+              (r.start_time && r.end_time
+                ? (new Date(`${r.end_date}T${r.end_time}`).getTime() -
+                    new Date(`${r.date}T${r.start_time}`).getTime()) /
+                  60000
+                : 0),
             ...(r.kind === "timetable"
               ? {
                   weekday: (parseDate(r.date).getDay() + 6) % 7,
-                  start_minute: clockMinutes(r.start_time),
-                  end_minute: clockMinutes(r.end_time),
+                  start_minute: r.all_day ? 0 : clockMinutes(r.start_time),
+                  end_minute: r.all_day ? 1440 : clockMinutes(r.end_time),
+                  all_day: Boolean(r.all_day),
                   valid_from: r.date,
                   valid_until: r.end_date,
                   semester_index: r.timetable?.semester_index || 0,
@@ -504,26 +768,37 @@ export function importPayload(rows: ImportRow[]) {
                   started_at:
                     r.activity?.occurred_on === r.date
                       ? r.activity.started_at || null
-                      : null,
+                      : r.start_time
+                        ? new Date(`${r.date}T${r.start_time}`).toISOString()
+                        : null,
                   ended_at:
                     r.activity?.occurred_on === r.date
                       ? r.activity.ended_at || null
-                      : null,
+                      : r.end_time
+                        ? new Date(`${r.end_date}T${r.end_time}`).toISOString()
+                        : null,
                 }
               : {}),
             ...(r.kind === "session"
               ? {
                   scheduled_start: new Date(
-                    `${r.date}T${r.start_time}`,
+                    `${r.date}T${r.start_time || "00:00"}`,
                   ).toISOString(),
-                  scheduled_end: new Date(
-                    `${r.end_date}T${r.end_time}`,
+                  scheduled_end: (r.end_time
+                    ? new Date(`${r.end_date}T${r.end_time}`)
+                    : new Date(
+                        new Date(`${r.date}T00:00`).getTime() +
+                          Number(r.minutes) * 60000,
+                      )
                   ).toISOString(),
-                  planned_minutes: Math.round(
-                    (new Date(`${r.end_date}T${r.end_time}`).getTime() -
-                      new Date(`${r.date}T${r.start_time}`).getTime()) /
-                      60000,
-                  ),
+                  is_unscheduled: !r.start_time && !r.end_time,
+                  planned_minutes: !r.start_time
+                    ? Number(r.minutes)
+                    : Math.round(
+                        (new Date(`${r.end_date}T${r.end_time}`).getTime() -
+                          new Date(`${r.date}T${r.start_time}`).getTime()) /
+                          60000,
+                      ),
                   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                 }
               : {}),
@@ -546,7 +821,10 @@ export function repeatImport(
         end_date = validDate(r.end_date)
           ? addDays(
               r.end_date,
-              r.kind === "timetable" && r.end_date === r.date
+              r.kind === "timetable" &&
+                !r.explicit_end &&
+                !r.all_day &&
+                r.end_date === r.date
                 ? weeks * 7 - 1
                 : i * 7,
             )
@@ -635,11 +913,11 @@ export async function parseCalendar(
             end_date: date.isDate
               ? addDays(sb.slice(0, 10), -1)
               : sb.slice(0, 10),
-            start_time: sa.slice(11),
-            end_time: sb.slice(11),
+            start_time: date.isDate ? "" : sa.slice(11),
+            end_time: date.isDate ? "" : sb.slice(11),
             notes: detail.item.description || "",
           },
-          date.isDate ? "goal" : "session",
+          date.isDate ? "timetable" : "session",
           anchor,
           out.length,
         ),

@@ -50,6 +50,7 @@ import { GoalForm, SettingsForm } from "./journey-forms";
 import PlanningHub from "./planning";
 import dynamic from "next/dynamic";
 const ImportDialog = dynamic(() => import("./import-dialog"));
+const Preparation = dynamic(() => import("./preparation"));
 import {
   goalProgressText,
   goalDateText,
@@ -76,7 +77,7 @@ import {
 
 type View = "timeline" | "goals" | "journal" | "planning";
 type Modal =
-  | { kind: "auth" | "recovery" | "settings" }
+  | { kind: "auth" | "recovery" | "settings" | "prepare" }
   | { kind: "import"; initialKind?: "timetable" }
   | { kind: "goal"; goal?: Goal; date?: string }
   | { kind: "activity"; activity?: Activity; date?: string }
@@ -325,8 +326,15 @@ function GoalCard({
       {goal.description && (
         <p className="goal-description">{goal.description}</p>
       )}
-      {goal.tracking_mode === "progress" ||
-      goal.tracking_mode === "checklist" ? (
+      {goal.tracking_mode === "none" ? (
+        <div className="measure-empty">
+          <span>{completed ? "Đã hoàn thành" : "Chưa đặt thước đo"}</span>
+          <button className="text-button" onClick={onEdit}>
+            Thêm thước đo
+          </button>
+        </div>
+      ) : goal.tracking_mode === "progress" ||
+        goal.tracking_mode === "checklist" ? (
         <>
           <div className="progress-caption">
             <span>{completed ? "Đã hoàn thành" : "Tiến độ"}</span>
@@ -502,7 +510,16 @@ export default function Tracker() {
         allGoals.some((g) => g.id === previous) ? previous : "all",
       );
       setActivities(allActivities);
-      if (!savedProfile)
+      if (
+        !resolvedProfile.preparation_done &&
+        !allGoals.length &&
+        !allActivities.length
+      ) {
+        setView("planning");
+        setModal((previous) =>
+          previous?.kind === "recovery" ? previous : { kind: "prepare" },
+        );
+      } else if (!savedProfile)
         setModal((previous) =>
           previous?.kind === "recovery" ? previous : { kind: "settings" },
         );
@@ -1972,8 +1989,25 @@ export default function Tracker() {
           profile={profile}
           onClose={() => setModal(null)}
           onImported={async () => {
+            if (!profile.preparation_done)
+              await saveProfile({ ...profile, preparation_done: true });
             await loadData(user);
-            setNotice("Đã nhập dữ liệu.");
+            setView("planning");
+          }}
+        />
+      )}
+      {modal?.kind === "prepare" && profile && user && (
+        <Preparation
+          profile={profile}
+          onSave={saveProfile}
+          onImport={() => setModal({ kind: "import" })}
+          onSkip={() => {
+            void saveProfile({ ...profile, preparation_done: true })
+              .then(() => {
+                setModal(null);
+                setView("planning");
+              })
+              .catch((e) => setNotice(errorMessage(e)));
           }}
         />
       )}
@@ -2037,8 +2071,10 @@ export default function Tracker() {
                     <span>
                       <strong>{s.title}</strong>
                       <small>
-                        {localDateTime(s.scheduled_start).slice(11)}–
-                        {localDateTime(s.scheduled_end).slice(11)} ·{" "}
+                        {s.is_unscheduled
+                          ? `${s.planned_minutes} phút · Chưa xếp giờ`
+                          : `${localDateTime(s.scheduled_start).slice(11)}–${localDateTime(s.scheduled_end).slice(11)}`}{" "}
+                        ·{" "}
                         {s.status === "completed" ? "Đã xác nhận" : "Mở timer"}
                       </small>
                     </span>

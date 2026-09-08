@@ -1,0 +1,170 @@
+.import-help {
+  background: #f3f6ed;
+  padding: 20px;
+  border: 1px solid #dee6d5;
+  border-radius: 14px;
+}
+.import-help > strong {
+  font-size: 17px;
+  line-height: 1.5;
+}
+.import-help p {
+  color: #687569;
+  font-size: 14px;
+  line-height: 1.7;
+  margin: 10px 0 16px;
+}
+.import-help details {
+  margin-top: 16px;
+  font-size: 13px;
+}
+.import-help textarea {
+  margin-top: 10px;
+  width: 100%;
+  font-family: inherit;
+  font-size: 13px;
+}
+.import-help summary,
+.import-group > summary {
+  cursor: pointer;
+}
+.import-groups {
+  display: grid;
+  gap: 12px;
+}
+.import-group {
+  border: 1px solid #dfe5dc;
+  border-radius: 12px;
+  overflow: clip;
+}
+.import-group > summary {
+  background: #f4f6ef;
+  padding: 18px;
+}
+.import-group > summary strong {
+  margin-right: 16px;
+}
+.import-group > summary span {
+  color: #687569;
+  font-size: 13px;
+}
+.import-group .import-table-scroll {
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+}
+.import-group .import-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 860px;
+}
+.import-group th:first-child {
+  width: 48px;
+}
+.import-group th:nth-child(2) {
+  width: 30%;
+}
+.import-group th:nth-child(3) {
+  width: 20%;
+}
+.import-group th:nth-child(4) {
+  width: 18%;
+}
+.import-group td {
+  padding: 12px;
+  vertical-align: top;
+}
+.import-group td label {
+  font-size: 12px;
+}
+.import-group td input,
+.import-group td select {
+  font-size: 13px;
+  min-width: 0;
+}
+.import-group td > .text-button {
+  padding: 4px 0;
+}
+.import-group small {
+  display: block;
+  margin-top: 6px;
+  line-height: 1.5;
+}
+.import-warning ul {
+  max-height: 200px;
+  overflow: auto;
+  padding-left: 20px;
+  margin: 10px 0 0;
+}
+.import-warning .text-button {
+  text-align: left;
+  line-height: 1.5;
+}
+.measure-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #798476;
+  font-size: 13px;
+  margin: 18px 0;
+}
+@media (max-width: 680px) {
+  .import-help {
+    padding: 16px;
+  }
+  .import-help .row-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .import-group > summary strong,
+  .import-group > summary span {
+    display: block;
+    margin: 3px 0;
+  }
+  .import-group .import-table {
+    min-width: 0;
+    display: block;
+  }
+  .import-group thead {
+    display: none;
+  }
+  .import-group tbody {
+    display: block;
+  }
+  .import-group tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    border-bottom: 1px solid #dfe5dc;
+    padding: 10px;
+  }
+  .import-group td {
+    display: block;
+    padding: 6px;
+    border: 0;
+    min-width: 0;
+  }
+  .import-group td:first-child {
+    grid-column: 1 / -1;
+  }
+  .import-group td:nth-child(2),
+  .import-group td:nth-child(5) {
+    grid-column: 1 / -1;
+  }
+  .import-group td:nth-child(5)::before {
+    content: "Gắn mục tiêu";
+    display: block;
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+  .import-group td:nth-child(5):empty {
+    display: none;
+  }
+}
+.import-form {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}

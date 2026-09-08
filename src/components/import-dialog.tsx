@@ -1,18 +1,21 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Dialog from "./dialog";
 import DatePicker from "./date-picker";
 import { getSupabase } from "@/lib/supabase";
 import { errorMessage } from "@/lib/errors";
 import {
   todayKey,
-  addDays,
   parseDate,
   type Activity,
   type Goal,
   type Profile,
 } from "@/lib/timeline";
-import { importPayload, labels } from "@/lib/importer";
+import {
+  importPayload,
+  prepareImportRows,
+  validImportRows,
+} from "@/lib/importer";
 import {
   parseCalendar,
   parseJson,
@@ -22,18 +25,19 @@ import {
   type ImportRow,
   type ImportKind,
 } from "@/lib/importer";
-import { monday } from "@/lib/planning";
+import { monday, localDateTime } from "@/lib/planning";
 import {
   journeySemesters,
   clockMinutes,
   type TimetableEntry,
 } from "@/lib/schedule";
+import ImportHelp from "./import-help";
+import { importTemplate } from "@/lib/import-guide";
+import { ImportReviewRow, importChoices } from "./import-review";
 import type { FileText } from "@/lib/import-files";
 
 const timetableSample =
   "Tên môn học,Thứ,Giờ bắt đầu,Giờ kết thúc,Loại\nCấu trúc dữ liệu,T2,08:00,10:00,class\nThể thao,T4,17:00,18:00,fixed";
-const sample =
-  "title,date,end_date,start_time,end_time,goal_id,minutes\nLuyện IELTS,2026-09-07,2026-09-07,19:00,20:00,,60\nViết Paper,2026-09-08,2026-09-08,14:00,16:00,,120";
 export default function ImportDialog({
   initialKind = "session",
   goals,
@@ -83,9 +87,50 @@ export default function ImportDialog({
     [checked, setChecked] = useState(false),
     [sheets, setSheets] = useState<FileText["sheets"]>([]),
     [batch, setBatch] = useState("");
+  const formRef = useRef<HTMLFieldSetElement>(null);
+  const sample = importTemplate(todayKey(), initialTerm.end);
+  const scrollTop = () =>
+    requestAnimationFrame(() =>
+      formRef.current?.closest('[role="dialog"]')?.scrollTo({ top: 0 }),
+    );
   const issues = rows.map((r) => validateImportRow(r, goals, rows, todayKey()));
   const selected = rows.filter((r) => r.selected);
-  const invalid = rows.some((r, i) => r.selected && issues[i]);
+  const valid = validImportRows(rows, goals, todayKey());
+  const invalid = rows.filter((r, i) => r.selected && issues[i]);
+  const [result, setResult] = useState("");
+  const [opened, setOpened] = useState<string[]>([]);
+  const groups = [
+    {
+      key: "goal",
+      title: "Mục tiêu",
+      items: rows.filter((r) => r.kind === "goal" || r.kind === "budget"),
+    },
+    {
+      key: "timetable",
+      title: "TKB & việc cố định",
+      items: rows.filter((r) => r.kind === "timetable"),
+    },
+    {
+      key: "session",
+      title: "Hoạt động · dự định",
+      items: rows.filter((r) => r.kind === "session"),
+    },
+    {
+      key: "activity",
+      title: "Hoạt động · đã xong",
+      items: rows.filter((r) => r.kind === "activity"),
+    },
+  ].filter((g) => g.items.length);
+  function jump(row: ImportRow) {
+    setOpened((prev) => [
+      ...new Set([...prev, row.kind === "budget" ? "goal" : row.kind]),
+    ]);
+    window.setTimeout(() => {
+      const element = document.getElementById("import-" + row.key);
+      element?.scrollIntoView({ block: "center", behavior: "smooth" });
+      element?.focus();
+    }, 50);
+  }
   async function parse() {
     setBusy(true);
     setError("");
@@ -107,7 +152,7 @@ export default function ImportDialog({
           }
         });
       const repeated = repeatImport(
-        base,
+        prepareImportRows(base, goals, todayKey()),
         format === "ics" ? 1 : weeks,
         [],
         false,
@@ -119,11 +164,6 @@ export default function ImportDialog({
             semester_index:
               format === "json" ? (r.timetable?.semester_index ?? term) : term,
           };
-          if (format !== "json" && format !== "ics")
-            r.end_date = [
-              r.end_date,
-              addDays(monday(anchor), weeks * 7 - 1),
-            ].sort()[0];
         }
       });
       const seen = new Set<string>();
@@ -131,12 +171,17 @@ export default function ImportDialog({
         title: string;
         scheduled_start: string;
         scheduled_end: string;
+        is_unscheduled: boolean;
+        planned_minutes: number;
+        goal_id: string | null;
       }[] = [];
       if (repeated.some((r) => r.kind === "session")) {
         for (let from = 0; ; from += 1000) {
           const q = await getSupabase()!
             .from("focus_sessions")
-            .select("title,scheduled_start,scheduled_end,id")
+            .select(
+              "title,scheduled_start,scheduled_end,id,is_unscheduled,planned_minutes,goal_id",
+            )
             .eq("user_id", profile.id)
             .order("id")
             .range(from, from + 999);
@@ -174,6 +219,9 @@ export default function ImportDialog({
           r.start_time,
           r.end_time,
           r.goal_id,
+          r.goal_ref,
+          r.minutes,
+          r.all_day,
         ]);
         const duplicate =
           seen.has(signature) ||
@@ -181,20 +229,32 @@ export default function ImportDialog({
             existingTimetable.some(
               (t) =>
                 t.title === r.title &&
-                t.weekday === (parseDate(r.date).getDay() + 6) % 7 &&
-                t.start_minute === clockMinutes(r.start_time) &&
-                t.end_minute === clockMinutes(r.end_time) &&
-                t.valid_from <= r.end_date &&
-                t.valid_until >= r.date,
+                (t.goal_id || "") === r.goal_id &&
+                Boolean(t.all_day) === Boolean(r.all_day) &&
+                (r.all_day ||
+                  t.weekday === (parseDate(r.date).getDay() + 6) % 7) &&
+                t.start_minute ===
+                  (r.all_day ? 0 : clockMinutes(r.start_time)) &&
+                t.end_minute ===
+                  (r.all_day ? 1440 : clockMinutes(r.end_time)) &&
+                t.valid_from <= r.date &&
+                t.valid_until >= r.end_date,
             )) ||
           (r.kind === "session" &&
             existingSessions.some(
               (s) =>
                 s.title === r.title &&
-                Date.parse(s.scheduled_start) ===
-                  Date.parse(`${r.date}T${r.start_time}`) &&
-                Date.parse(s.scheduled_end) ===
-                  Date.parse(`${r.end_date}T${r.end_time}`),
+                (s.goal_id || "") === r.goal_id &&
+                (s.is_unscheduled
+                  ? !r.start_time &&
+                    !r.end_time &&
+                    localDateTime(s.scheduled_start).slice(0, 10) === r.date &&
+                    s.planned_minutes === Number(r.minutes)
+                  : Boolean(r.start_time) &&
+                    Date.parse(s.scheduled_start) ===
+                      Date.parse(`${r.date}T${r.start_time}`) &&
+                    Date.parse(s.scheduled_end) ===
+                      Date.parse(`${r.end_date}T${r.end_time}`)),
             )) ||
           (r.kind === "goal" &&
             goals.some(
@@ -204,13 +264,18 @@ export default function ImportDialog({
             activities.some(
               (a) =>
                 a.title === r.title &&
+                (a.goal_id || "") === r.goal_id &&
                 a.occurred_on === r.date &&
-                Number(a.duration_minutes) === Number(r.minutes),
+                Number(a.duration_minutes) ===
+                  (Number(r.minutes) ||
+                    (Date.parse(`${r.end_date}T${r.end_time}`) -
+                      Date.parse(`${r.date}T${r.start_time}`)) /
+                      60000),
             ));
         seen.add(signature);
         return {
           ...r,
-          selected: !duplicate,
+          selected: r.selected && !duplicate,
           issue: duplicate
             ? "Có thể trùng dữ liệu; mặc định bỏ chọn."
             : r.issue,
@@ -220,6 +285,7 @@ export default function ImportDialog({
         throw new Error("Không tìm thấy dòng nào trong khoảng đã chọn.");
       setRows(prepared);
       setBatch(crypto.randomUUID());
+      scrollTop();
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -230,24 +296,50 @@ export default function ImportDialog({
     setRows(
       rows.map((r, i) =>
         i === index
-          ? { ...r, ...data, ...(data.kind ? { issue: "" } : {}) }
+          ? {
+              ...r,
+              ...data,
+              server_error: undefined,
+              ...(data.kind ? { issue: "" } : {}),
+            }
           : r,
       ),
     );
     setChecked(false);
   };
   async function commit() {
-    if (!checked || invalid || !selected.length) return;
+    if (!checked || !valid.length) return;
     setBusy(true);
     setError("");
     try {
-      const r = await getSupabase()!.rpc("import_tracker", {
+      const r = await getSupabase()!.rpc("import_tracker_reviewed", {
         p_batch_id: batch,
-        p_items: importPayload(rows),
+        p_items: importPayload(valid),
       });
       if (r.error) throw r.error;
+      const accepted = new Set<string>(r.data.accepted || []);
+      const failures = r.data.errors as { key: string; message: string }[];
+      const skipped = invalid.length + failures.length;
+      const message =
+        (r.data?.already_imported ? "Lần nhập này đã được lưu: " : "Đã nhập ") +
+        r.data.count +
+        " dòng" +
+        (skipped ? ", bỏ qua " + skipped + " dòng cần sửa." : ".");
+      setResult(message);
+      const kept = rows
+        .filter((row) => !accepted.has(row.key))
+        .map((row) => ({
+          ...row,
+          goal_id: row.goal_id || r.data.goal_map?.[row.goal_ref] || "",
+          goal_ref: r.data.goal_map?.[row.goal_ref] ? "" : row.goal_ref,
+          server_error: failures.find((f) => f.key === row.key)?.message,
+        }));
+      const next = skipped ? kept : [];
+      setRows(next);
+      setChecked(false);
+      setBatch(crypto.randomUUID());
       await onImported();
-      onClose();
+      scrollTop();
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -263,9 +355,24 @@ export default function ImportDialog({
       }}
       wide
     >
-      <div className="form import-form">
-        {!rows.length ? (
+      <fieldset ref={formRef} disabled={busy} className="form import-form">
+        {result && (
+          <div className="form-success" role="status">
+            {result}
+            {rows.length > 0 ? (
+              <button className="text-button" onClick={() => jump(rows[0])}>
+                Xem lại dòng chưa nhập
+              </button>
+            ) : (
+              <button className="button primary" onClick={onClose}>
+                Vào Tuần & phiên học
+              </button>
+            )}
+          </div>
+        )}
+        {!rows.length && !result ? (
           <>
+            <ImportHelp day={todayKey()} termEnd={initialTerm.end} />
             <label>
               Chọn file
               <input
@@ -350,7 +457,7 @@ export default function ImportDialog({
                     }
                   }}
                 >
-                  {Object.entries(labels).map(([k, v]) => (
+                  {Object.entries(importChoices).map(([k, v]) => (
                     <option key={k} value={k}>
                       {v}
                     </option>
@@ -412,12 +519,6 @@ export default function ImportDialog({
               <a href="/templates/timetable.csv" download>
                 Tải mẫu TKB
               </a>
-              <a href="/templates/schedule.csv" download>
-                Tải CSV mẫu
-              </a>
-              <a href="/templates/goals.json" download>
-                Tải JSON mẫu
-              </a>
             </div>
             <details className="import-help">
               <summary>Các cột được hỗ trợ</summary>
@@ -425,15 +526,15 @@ export default function ImportDialog({
                 Tên hoạt động (title), ngày (date), ngày kết thúc (end_date),
                 giờ bắt đầu (start_time), giờ kết thúc (end_time), mục tiêu
                 (goal_id: tên hoặc ID), phút (minutes), ghi chú (notes), loại
-                (kind: goal/session/activity/budget/class/fixed). Ngày dùng
-                YYYY-MM-DD hoặc DD/MM/YYYY, giờ dùng HH:mm. Có thể dùng cột Thứ
-                thay ngày để áp dụng tuần đầu bên dưới.
+                (kind: goal/class/fixed/activity). Ngày dùng YYYY-MM-DD hoặc
+                DD/MM/YYYY, giờ dùng HH:mm. Có thể dùng cột Thứ thay ngày để áp
+                dụng tuần đầu bên dưới.
               </p>
               <p>
-                Mục tiêu hỗ trợ thêm tracking_mode
-                (numeric/checklist/progress/milestone), current, target, unit,
-                color. Dự án với các bước dùng mẫu JSON. Phiên là kế hoạch; nhật
-                ký là việc đã làm.
+                Mục tiêu có current, target, unit để đo bằng số hoặc steps để
+                liệt kê việc, weekly_hours là quỹ giờ mỗi tuần. Có thể đặt thước
+                đo sau. status của hoạt động là planned (dự định) hoặc completed
+                (đã xong); bỏ trống để suy ra theo ngày.
               </p>
             </details>
             <div className="form-row">
@@ -449,7 +550,7 @@ export default function ImportDialog({
               <label>
                 {format === "ics"
                   ? "Đọc trong bao nhiêu tuần?"
-                  : "Áp dụng phiên / TKB / quỹ giờ trong bao nhiêu tuần?"}
+                  : "Lặp hoạt động / TKB chưa có ngày kết thúc trong bao nhiêu tuần?"}
                 <input
                   type="number"
                   required
@@ -461,7 +562,8 @@ export default function ImportDialog({
               </label>
             </div>
             <p className="muted small">
-              Mục tiêu và nhật ký không lặp. ICS được mở rộng theo quy tắc lặp
+              Mục tiêu và hoạt động đã xong không lặp. Ngày kết thúc có sẵn
+              trong file luôn được giữ nguyên. ICS được mở rộng theo quy tắc lặp
               của lịch trong khoảng đã chọn.
             </p>
             <button
@@ -472,7 +574,7 @@ export default function ImportDialog({
               {busy ? progress || "Đang đọc…" : "Phân tích & xem trước"}
             </button>
           </>
-        ) : (
+        ) : rows.length ? (
           <>
             <div className="section-row">
               <strong>
@@ -483,6 +585,7 @@ export default function ImportDialog({
                 disabled={busy}
                 onClick={() => {
                   setRows([]);
+                  setResult("");
                   setChecked(false);
                 }}
               >
@@ -490,342 +593,92 @@ export default function ImportDialog({
               </button>
             </div>
             <p className="muted small">
-              Chỉnh trực tiếp tên, ngày, giờ và mục tiêu. Dòng lỗi cần sửa hoặc
-              bỏ chọn. Mục tiêu nhập mới có thể chỉnh thước đo đầy đủ sau khi
-              lưu.
+              Mục tiêu được tạo trước rồi gắn vào lịch và hoạt động theo tên.
+              Chỉ các dòng hợp lệ, đang chọn sẽ được nhập.
             </p>
-            <div className="import-table-scroll">
-              <table className="import-table">
-                <thead>
-                  <tr>
-                    <th>Nhập</th>
-                    <th>Loại / tên</th>
-                    <th>Ngày → ngày</th>
-                    <th>Giờ / phút</th>
-                    <th>Gắn mục tiêu</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r, i) => (
-                    <tr key={r.key} className={issues[i] ? "invalid" : ""}>
-                      <td>
-                        <input
-                          type="checkbox"
-                          aria-label={`Nhập dòng ${i + 1}`}
-                          checked={r.selected}
-                          onChange={(e) =>
-                            patch(i, { selected: e.target.checked })
-                          }
-                        />
-                      </td>
-                      <td>
-                        <select
-                          aria-label={`Loại dòng ${i + 1}`}
-                          value={r.kind}
-                          onChange={(e) =>
-                            patch(i, { kind: e.target.value as ImportKind })
-                          }
-                        >
-                          {Object.entries(labels).map(([k, v]) => (
-                            <option key={k} value={k}>
-                              {v}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          aria-label={`Tên dòng ${i + 1}`}
-                          value={r.title}
-                          onChange={(e) => patch(i, { title: e.target.value })}
-                        />
-                        <details className="preview-details">
-                          <summary>Ghi chú & thông tin chi tiết</summary>
-                          <label>
-                            Ghi chú
-                            <textarea
-                              aria-label={`Ghi chú dòng ${i + 1}`}
-                              value={r.notes}
-                              maxLength={4000}
-                              onChange={(e) =>
-                                patch(i, { notes: e.target.value })
-                              }
-                            />
-                          </label>
-                          {r.kind === "goal" && (
-                            <>
-                              <label>
-                                Cách theo dõi
-                                <select
-                                  aria-label={`Cách theo dõi dòng ${i + 1}`}
-                                  value={r.goal.tracking_mode || "milestone"}
-                                  onChange={(e) =>
-                                    patch(i, {
-                                      goal: {
-                                        ...r.goal,
-                                        tracking_mode: e.target
-                                          .value as Goal["tracking_mode"],
-                                      },
-                                    })
-                                  }
-                                >
-                                  <option value="milestone">Một cột mốc</option>
-                                  <option value="numeric">
-                                    Mức hiện tại → mục tiêu
-                                  </option>
-                                  <option value="checklist">
-                                    Dự án có các bước
-                                  </option>
-                                  <option value="progress">Phần trăm</option>
-                                </select>
-                              </label>
-                              {r.goal.tracking_mode === "numeric" ? (
-                                <>
-                                  <label>
-                                    Mức hiện tại
-                                    <input
-                                      aria-label={`Mức hiện tại dòng ${i + 1}`}
-                                      type="number"
-                                      step="any"
-                                      value={r.goal.metric_current ?? 0}
-                                      onChange={(e) =>
-                                        patch(i, {
-                                          goal: {
-                                            ...r.goal,
-                                            metric_current: Number(
-                                              e.target.value,
-                                            ),
-                                          },
-                                        })
-                                      }
-                                    />
-                                  </label>
-                                  <label>
-                                    Mức mục tiêu
-                                    <input
-                                      aria-label={`Mức mục tiêu dòng ${i + 1}`}
-                                      type="number"
-                                      step="any"
-                                      value={r.goal.metric_target ?? 1}
-                                      onChange={(e) =>
-                                        patch(i, {
-                                          goal: {
-                                            ...r.goal,
-                                            metric_target: Number(
-                                              e.target.value,
-                                            ),
-                                          },
-                                        })
-                                      }
-                                    />
-                                  </label>
-                                  <label>
-                                    Đơn vị
-                                    <input
-                                      value={r.goal.metric_unit || ""}
-                                      maxLength={30}
-                                      onChange={(e) =>
-                                        patch(i, {
-                                          goal: {
-                                            ...r.goal,
-                                            metric_unit: e.target.value,
-                                          },
-                                        })
-                                      }
-                                    />
-                                  </label>
-                                </>
-                              ) : r.goal.tracking_mode === "checklist" ? (
-                                <ul>
-                                  {r.goal.checklist?.map((s) => (
-                                    <li key={s.id}>
-                                      {s.done ? "✓" : "○"} {s.title}
-                                    </li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <label>
-                                  {r.goal.tracking_mode === "progress"
-                                    ? "Tiến độ (%)"
-                                    : "Hoàn thành (0 hoặc 100)"}
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    step={
-                                      r.goal.tracking_mode === "progress"
-                                        ? 1
-                                        : 100
-                                    }
-                                    value={r.goal.progress || 0}
-                                    onChange={(e) =>
-                                      patch(i, {
-                                        goal: {
-                                          ...r.goal,
-                                          progress: Number(e.target.value),
-                                        },
-                                      })
-                                    }
-                                  />
-                                </label>
-                              )}
-                              <label>
-                                Màu
-                                <input
-                                  type="color"
-                                  value={r.goal.color || "#2563eb"}
-                                  onChange={(e) =>
-                                    patch(i, {
-                                      goal: {
-                                        ...r.goal,
-                                        color: e.target.value,
-                                      },
-                                    })
-                                  }
-                                />
-                              </label>
-                            </>
-                          )}
-                          {r.kind === "timetable" && (
-                            <label>
-                              Loại lịch cố định
-                              <select
-                                value={r.timetable?.kind || "class"}
-                                onChange={(e) =>
-                                  patch(i, {
-                                    timetable: {
-                                      kind: e.target.value as "class" | "fixed",
-                                      semester_index:
-                                        r.timetable?.semester_index ?? term,
-                                    },
-                                  })
-                                }
-                              >
-                                <option value="class">
-                                  Lớp học trên trường
-                                </option>
-                                <option value="fixed">Việc cố định</option>
-                              </select>
-                            </label>
-                          )}
-                          {r.activity?.is_milestone && (
-                            <p>
-                              ★ Cột mốc đã đạt · {r.activity.milestone_kind}
-                            </p>
-                          )}
-                          {r.activity?.started_at && (
-                            <p>
-                              {new Date(r.activity.started_at).toLocaleString(
-                                "vi-VN",
-                              )}{" "}
-                              →{" "}
-                              {new Date(r.activity.ended_at!).toLocaleString(
-                                "vi-VN",
-                              )}
-                            </p>
-                          )}
-                        </details>
-                        <small className={issues[i] ? "overdue" : "muted"}>
-                          {issues[i] || r.issue}
-                        </small>
-                      </td>
-                      <td>
-                        <input
-                          aria-label={`Ngày dòng ${i + 1}`}
-                          type="date"
-                          value={r.date}
-                          onChange={(e) =>
-                            patch(i, {
-                              date: e.target.value,
-                              end_date:
-                                r.date === r.end_date
-                                  ? e.target.value
-                                  : r.end_date,
-                            })
-                          }
-                        />
-                        <input
-                          aria-label={`Ngày kết thúc dòng ${i + 1}`}
-                          type="date"
-                          value={r.end_date}
-                          onChange={(e) =>
-                            patch(i, { end_date: e.target.value })
-                          }
-                        />
-                      </td>
-                      <td>
-                        {r.kind === "session" || r.kind === "timetable" ? (
-                          <>
-                            <input
-                              aria-label={`Giờ bắt đầu dòng ${i + 1}`}
-                              type="time"
-                              value={r.start_time}
-                              onChange={(e) =>
-                                patch(i, { start_time: e.target.value })
-                              }
-                            />
-                            <input
-                              aria-label={`Giờ kết thúc dòng ${i + 1}`}
-                              type="time"
-                              value={r.end_time}
-                              onChange={(e) =>
-                                patch(i, { end_time: e.target.value })
-                              }
-                            />
-                          </>
-                        ) : r.kind !== "goal" ? (
-                          <input
-                            aria-label={`Phút dòng ${i + 1}`}
-                            type="number"
-                            min={0}
-                            value={r.minutes}
-                            onChange={(e) =>
-                              patch(i, { minutes: e.target.value })
-                            }
-                          />
-                        ) : (
-                          <span>{r.goal.tracking_mode || "milestone"}</span>
-                        )}
-                      </td>
-                      <td>
-                        {r.kind !== "goal" && r.kind !== "timetable" && (
-                          <select
-                            aria-label={`Mục tiêu dòng ${i + 1}`}
-                            value={
-                              r.goal_id ||
-                              (r.goal_ref ? `new:${r.goal_ref}` : "")
-                            }
-                            onChange={(e) =>
-                              patch(i, {
-                                goal_id: e.target.value.startsWith("new:")
-                                  ? ""
-                                  : e.target.value,
-                                goal_ref: e.target.value.startsWith("new:")
-                                  ? e.target.value.slice(4)
-                                  : "",
-                              })
-                            }
-                          >
-                            <option value="">Không gắn mục tiêu</option>
-                            {goals.map((g) => (
-                              <option value={g.id} key={g.id}>
-                                {g.title}
-                              </option>
-                            ))}
-                            {rows
-                              .filter(
-                                (g) => g.kind === "goal" && g.ref && g.selected,
-                              )
-                              .map((g) => (
-                                <option key={g.key} value={`new:${g.ref}`}>
-                                  Nhập mới: {g.title}
-                                </option>
-                              ))}
-                          </select>
-                        )}
-                      </td>
-                    </tr>
+            {invalid.length > 0 && (
+              <div className="import-warning" role="alert">
+                <strong>
+                  {invalid.length} dòng cần xem lại · {valid.length} dòng sẵn
+                  sàng nhập
+                </strong>
+                <ul>
+                  {invalid.map((r) => (
+                    <li key={r.key}>
+                      <button className="text-button" onClick={() => jump(r)}>
+                        {r.title || "Chưa có tên"}: {issues[rows.indexOf(r)]}
+                      </button>
+                    </li>
                   ))}
-                </tbody>
-              </table>
+                </ul>
+              </div>
+            )}
+            <div className="import-groups">
+              {groups.map((group) => {
+                const created = group.items.filter(
+                  (r) => r.kind === "goal" && r.selected,
+                ).length;
+                const linked = new Set(
+                  group.items
+                    .map((r) => r.goal_id || r.goal_ref)
+                    .filter(Boolean),
+                ).size;
+                const errors = group.items.filter(
+                  (r) => r.selected && issues[rows.indexOf(r)],
+                ).length;
+                return (
+                  <details
+                    key={group.key}
+                    open={opened.includes(group.key)}
+                    className="import-group"
+                    onToggle={(e) => {
+                      const open = e.currentTarget.open;
+                      setOpened((prev) =>
+                        open
+                          ? [...new Set([...prev, group.key])]
+                          : prev.filter((k) => k !== group.key),
+                      );
+                    }}
+                  >
+                    <summary>
+                      <strong>{group.title}</strong>
+                      <span>
+                        {group.items.length} dòng ·{" "}
+                        {group.key === "goal"
+                          ? created + " tạo mới"
+                          : "gắn vào " + linked + " mục tiêu"}
+                        {errors ? " · " + errors + " cần sửa" : ""}
+                      </span>
+                    </summary>
+                    <div className="import-table-scroll">
+                      <table className="import-table">
+                        <thead>
+                          <tr>
+                            <th>Nhập</th>
+                            <th>Loại / tên</th>
+                            <th>Ngày</th>
+                            <th>Thời gian</th>
+                            <th>Gắn mục tiêu</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.items.map((r) => (
+                            <ImportReviewRow
+                              key={r.key}
+                              row={r}
+                              index={rows.indexOf(r)}
+                              issue={issues[rows.indexOf(r)]}
+                              rows={rows}
+                              goals={goals}
+                              patch={patch}
+                            />
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                );
+              })}
             </div>
             <label className="checkbox-label">
               <input
@@ -835,27 +688,31 @@ export default function ImportDialog({
                 onChange={(e) => setChecked(e.target.checked)}
               />
               Tôi đã đối chiếu ngày, giờ, loại dữ liệu và xác nhận nhập{" "}
-              {selected.length} dòng đã chọn.
+              {valid.length} dòng hợp lệ
+              {invalid.length
+                ? `; bỏ qua ${invalid.length} dòng lỗi để sửa sau`
+                : ""}
+              .
             </label>
             <button
               className="button primary"
-              disabled={busy || !checked || invalid || !selected.length}
+              disabled={busy || !checked || !valid.length}
               onClick={() => void commit()}
             >
-              {busy ? "Đang nhập…" : `Xác nhận nhập ${selected.length} dòng`}
+              {busy ? "Đang nhập…" : `Nhập ${valid.length} dòng hợp lệ`}
             </button>
             <p className="muted small">
               Dữ liệu được lưu cùng lúc. Gửi lại cùng một lần nhập không tạo bản
               sao.
             </p>
           </>
-        )}
+        ) : null}
         {error && (
           <p className="form-error" role="alert">
             {error}
           </p>
         )}
-      </div>
+      </fieldset>
     </Dialog>
   );
 }

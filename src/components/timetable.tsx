@@ -133,14 +133,30 @@ export default function Timetable({
                 ...timetableOnDay(entries, day).map((e) => ({
                   at: e.start_minute,
                   node: (
-                    <div className="class-block" key={e.id}>
+                    <div
+                      className="class-block"
+                      key={e.id}
+                      style={
+                        e.goal_id
+                          ? {
+                              borderLeftColor: goals.find(
+                                (g) => g.id === e.goal_id,
+                              )?.color,
+                            }
+                          : undefined
+                      }
+                    >
                       <small>
-                        {minuteClock(e.start_minute)}–
-                        {minuteClock(e.end_minute)}
+                        {e.all_day
+                          ? "Cả ngày"
+                          : `${minuteClock(e.start_minute)}–${minuteClock(e.end_minute)}`}
                       </small>
                       <strong>{e.title}</strong>
                       <span>
                         {e.kind === "class" ? "Lớp học" : "Việc cố định"}
+                        {e.goal_id
+                          ? ` · ${goals.find((g) => g.id === e.goal_id)?.title || "Mục tiêu"}`
+                          : ""}
                       </span>
                       <button
                         className="icon-button"
@@ -168,8 +184,9 @@ export default function Timetable({
                       onClick={() => onSession(s.id)}
                     >
                       <small>
-                        {localDateTime(s.scheduled_start).slice(11)}–
-                        {localDateTime(s.scheduled_end).slice(11)}
+                        {s.is_unscheduled
+                          ? `${formatMinutes(s.planned_minutes)} · Chưa xếp giờ`
+                          : `${localDateTime(s.scheduled_start).slice(11)}–${localDateTime(s.scheduled_end).slice(11)}`}
                       </small>
                       <strong>{s.title}</strong>
                       <span>
@@ -224,6 +241,7 @@ export default function Timetable({
         <TimetableForm
           entry={edit === "new" ? undefined : edit}
           profile={profile}
+          goals={goals}
           onClose={() => setEdit(null)}
           onSave={async (data, id) => {
             const db = getSupabase()!;
@@ -273,12 +291,14 @@ export default function Timetable({
 function TimetableForm({
   entry,
   profile,
+  goals,
   onClose,
   onSave,
   onDelete,
 }: {
   entry?: TimetableEntry;
   profile: Profile;
+  goals: Goal[];
   onClose: () => void;
   onSave: (data: TimetableInput, id?: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -287,6 +307,7 @@ function TimetableForm({
     current =
       semesters.find((s) => s.start <= todayKey() && s.end >= todayKey()) ||
       semesters[0];
+  const [allDay, setAllDay] = useState(entry?.all_day || false);
   const [term, setTerm] = useState(entry?.semester_index ?? current.index),
     [from, setFrom] = useState(entry?.valid_from || current.start),
     [until, setUntil] = useState(entry?.valid_until || current.end),
@@ -298,13 +319,22 @@ function TimetableForm({
     setBusy(true);
     setError("");
     try {
-      const start = clockMinutes(String(f.get("start"))),
-        end = clockMinutes(String(f.get("end")));
-      if (end <= start || until < from)
+      const start = allDay ? 0 : clockMinutes(String(f.get("start"))),
+        end = allDay ? 1440 : clockMinutes(String(f.get("end")));
+      if (
+        !Number.isFinite(start) ||
+        !Number.isFinite(end) ||
+        start < 0 ||
+        end > 1440 ||
+        end <= start ||
+        until < from
+      )
         throw new Error("Kiểm tra khoảng ngày và giờ kết thúc.");
       await onSave(
         {
           title: String(f.get("title")).trim(),
+          goal_id: String(f.get("goal_id") || "") || null,
+          all_day: allDay,
           kind: f.get("kind") as "class" | "fixed",
           semester_index: term,
           weekday: Number(f.get("weekday")),
@@ -369,43 +399,69 @@ function TimetableForm({
           </label>
         </div>
         <label>
-          Thứ
-          <select name="weekday" defaultValue={entry?.weekday ?? 0}>
-            {[
-              "Thứ Hai",
-              "Thứ Ba",
-              "Thứ Tư",
-              "Thứ Năm",
-              "Thứ Sáu",
-              "Thứ Bảy",
-              "Chủ nhật",
-            ].map((d, i) => (
-              <option key={i} value={i}>
-                {d}
+          Gắn mục tiêu (tùy chọn)
+          <select name="goal_id" defaultValue={entry?.goal_id || ""}>
+            <option value="">Không gắn mục tiêu</option>
+            {goals.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.title}
               </option>
             ))}
           </select>
         </label>
-        <div className="form-row">
-          <label>
-            Bắt đầu
-            <input
-              name="start"
-              type="time"
-              required
-              defaultValue={minuteClock(entry?.start_minute ?? 480)}
-            />
-          </label>
-          <label>
-            Kết thúc
-            <input
-              name="end"
-              type="time"
-              required
-              defaultValue={minuteClock(entry?.end_minute ?? 600)}
-            />
-          </label>
-        </div>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={allDay}
+            onChange={(e) => setAllDay(e.target.checked)}
+          />
+          Sự kiện cả ngày, liên tục trong khoảng ngày
+        </label>
+        {!allDay && (
+          <>
+            <label>
+              Thứ
+              <select name="weekday" defaultValue={entry?.weekday ?? 0}>
+                {[
+                  "Thứ Hai",
+                  "Thứ Ba",
+                  "Thứ Tư",
+                  "Thứ Năm",
+                  "Thứ Sáu",
+                  "Thứ Bảy",
+                  "Chủ nhật",
+                ].map((d, i) => (
+                  <option key={i} value={i}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="form-row">
+              <label>
+                Bắt đầu
+                <input
+                  name="start"
+                  type="text"
+                  placeholder="HH:mm"
+                  inputMode="numeric"
+                  pattern="([01][0-9]|2[0-3]):[0-5][0-9]"
+                  required
+                  defaultValue={minuteClock(entry?.start_minute ?? 480)}
+                />
+              </label>
+              <label>
+                Kết thúc
+                <input
+                  name="end"
+                  type="time"
+                  required
+                  defaultValue={minuteClock(entry?.end_minute ?? 600)}
+                />
+              </label>
+            </div>
+          </>
+        )}
         <div className="form-row">
           <DatePicker label="Áp dụng từ" value={from} onChange={setFrom} />
           <DatePicker
@@ -480,7 +536,7 @@ function WeekPlanner({
       plannable.map((g) => [
         g.id,
         (budgets.find((b) => b.goal_id === g.id && b.week_start === w)
-          ?.planned_minutes || 0) / 60,
+          ?.planned_minutes ?? (g.weekly_hours || 0) * 60) / 60,
       ]),
     );
   const [target, setTarget] = useState(week),

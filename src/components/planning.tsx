@@ -352,7 +352,7 @@ export default function PlanningHub({
                   const p =
                       budgets.find(
                         (b) => b.week_start === week && b.goal_id === g.id,
-                      )?.planned_minutes || 0,
+                      )?.planned_minutes ?? (g.weekly_hours || 0) * 60,
                     a = work
                       .filter((x) => x.goal_id === g.id)
                       .reduce((n, x) => n + Number(x.duration_minutes), 0);
@@ -437,8 +437,10 @@ export default function PlanningHub({
                           {formatDate(
                             localDateTime(s.scheduled_start).slice(0, 10),
                           )}{" "}
-                          · {localDateTime(s.scheduled_start).slice(11)} –{" "}
-                          {localDateTime(s.scheduled_end).slice(11)}
+                          ·{" "}
+                          {s.is_unscheduled
+                            ? "Chưa xếp giờ"
+                            : `${localDateTime(s.scheduled_start).slice(11)} – ${localDateTime(s.scheduled_end).slice(11)}`}
                         </span>
                         <small>
                           {statusText[s.status]} ·{" "}
@@ -582,10 +584,25 @@ function SessionForm({
   ) => Promise<void>;
 }) {
   const [start, setStart] = useState(
-      session ? localDateTime(session.scheduled_start) : `${todayKey()}T09:00`,
+      session
+        ? session.is_unscheduled
+          ? `${localDateTime(session.scheduled_start).slice(0, 10)}T09:00`
+          : localDateTime(session.scheduled_start)
+        : `${todayKey()}T09:00`,
     ),
     [end, setEnd] = useState(
-      session ? localDateTime(session.scheduled_end) : `${todayKey()}T10:00`,
+      session
+        ? session.is_unscheduled
+          ? localDateTime(
+              new Date(
+                new Date(
+                  `${localDateTime(session.scheduled_start).slice(0, 10)}T09:00`,
+                ).getTime() +
+                  session.planned_minutes * 60000,
+              ).toISOString(),
+            )
+          : localDateTime(session.scheduled_end)
+        : `${todayKey()}T10:00`,
     ),
     [weeks, setWeeks] = useState(1),
     [busy, setBusy] = useState(false),
@@ -604,6 +621,7 @@ function SessionForm({
         title: String(f.get("title")).trim(),
         notes: String(f.get("notes") || "").trim(),
         goal_id: String(f.get("goal") || "") || null,
+        is_unscheduled: false,
         scheduled_start: new Date(start).toISOString(),
         scheduled_end: new Date(end).toISOString(),
         planned_minutes: minutes,

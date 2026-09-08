@@ -140,7 +140,7 @@ test("Vietnamese CSV/Docs tables support weekdays, quoted cells and editable inv
   assert.equal(rows[0].start_time, "09:00");
   assert.equal(validateImportRow(rows[0], [], rows, "2026-09-07"), "");
   rows[0].date = "2026-02-31";
-  assert.match(validateImportRow(rows[0], [], rows, "2026-09-07"), /ngày/);
+  assert.match(validateImportRow(rows[0], [], rows, "2026-09-07"), /ngày/i);
   assert.throws(() =>
     parseTable("arbitrary instructions", "session", "2026-09-07"),
   );
@@ -169,7 +169,8 @@ test("ICS expands weekly recurrence, respects EXDATE and exclusive all-day end",
   const rows = await parseCalendar(text, "2026-09-07", 4);
   assert.equal(rows.length, 3);
   assert.equal(rows[2].end_date, "2026-09-09");
-  assert.equal(rows[2].kind, "goal");
+  assert.equal(rows[2].kind, "timetable");
+  assert.equal(rows[2].all_day, true);
 });
 
 test("JSON activity import retains actual timestamps and milestone colors", () => {

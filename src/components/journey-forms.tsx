@@ -3,7 +3,7 @@ import { useState, type FormEvent } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import Dialog from "./dialog";
 import DatePicker from "./date-picker";
-import { ColorPicker, MilestoneSelect } from "./forms";
+import { ColorPicker } from "./forms";
 import { errorMessage } from "@/lib/errors";
 import {
   isGreen,
@@ -17,7 +17,6 @@ import {
 import {
   CATEGORIES,
   GOAL_COLORS,
-  MILESTONE_COLORS,
   todayKey,
   type Goal,
   type GoalInput,
@@ -47,19 +46,23 @@ export function GoalForm({
   onSave: (data: GoalInput, id?: string) => Promise<void>;
 }) {
   const [mode, setMode] = useState<Goal["tracking_mode"]>(
-    goal?.tracking_mode || "numeric",
+    goal?.tracking_mode === "milestone"
+      ? "checklist"
+      : goal?.tracking_mode || "none",
   );
   const [color, setColor] = useState(goal?.color || GOAL_COLORS[0]);
-  const [kind, setKind] = useState<MilestoneKind>(
-    goal?.milestone_kind || "general",
-  );
-  const [progress, setProgress] = useState(goal?.progress || 0);
+  const [kind] = useState<MilestoneKind>(goal?.milestone_kind || "general");
+  const [progress] = useState(goal?.progress || 0);
   const [current, setCurrent] = useState(goal?.metric_current ?? 0);
   const [target, setTarget] = useState(goal?.metric_target ?? 7);
   const [direction, setDirection] = useState<Goal["metric_direction"]>(
     goal?.metric_direction || "increase",
   );
-  const [steps, setSteps] = useState<GoalStep[]>(goal?.checklist || []);
+  const [steps, setSteps] = useState<GoalStep[]>(
+    goal?.tracking_mode === "milestone"
+      ? [{ id: "completion", title: goal.title, done: goal.progress === 100 }]
+      : goal?.checklist || [],
+  );
   const [start, setStart] = useState(goal?.starts_on || "");
   const [timing, setTiming] = useState<"fixed" | "window" | "flexible">(
     goal ? timingMode(goal) : "fixed",
@@ -83,7 +86,10 @@ export function GoalForm({
     setBusy(true);
     setError("");
     try {
-      if (!validDate(end) || (start && (!validDate(start) || start > end)))
+      if (
+        !validDate(end) ||
+        (timing !== "fixed" && start && (!validDate(start) || start > end))
+      )
         throw new Error("Khoảng thời gian chưa hợp lệ.");
       if (timing !== "fixed" && !start)
         throw new Error("Hãy chọn ngày đầu của khoảng thời gian.");
@@ -105,10 +111,11 @@ export function GoalForm({
           category: String(form.get("category")),
           color,
           tracking_mode: mode,
-          milestone_kind: mode === "milestone" ? kind : "general",
-          starts_on: start || null,
+          milestone_kind: kind,
+          starts_on: timing === "fixed" ? null : start || null,
           timing_mode: timing,
           reserved_hours: Number(form.get("reserved_hours") || 0),
+          weekly_hours: Number(form.get("weekly_hours") || 0),
           deadline: end,
           semester_index: scope === "" ? null : Number(scope),
           metric_current: current,
@@ -149,25 +156,19 @@ export function GoalForm({
           />
         </label>
         <fieldset className="tracking-choice">
-          <legend>Cách theo dõi</legend>
+          <legend>Làm sao biết mục tiêu này đã xong?</legend>
           <div>
             {(
               [
                 [
                   "numeric",
-                  "Mức hiện tại → mục tiêu",
-                  "IELTS, GPA, số bài đọc",
+                  "Khi đạt được một con số",
+                  "Hiện tại · mục tiêu · đơn vị",
                 ],
                 [
                   "checklist",
-                  "Dự án có cột mốc",
-                  "Tự tính từ các bước đã xong",
-                ],
-                ["progress", "Phần trăm tự nhập", "Khi bạn có cách đo riêng"],
-                [
-                  "milestone",
-                  "Một sự kiện / thành tựu",
-                  "Thi GK, CK, giải Hackathon",
+                  "Khi làm xong một danh sách việc",
+                  "Thêm các bước cụ thể",
                 ],
               ] as const
             ).map(([value, label, hint]) => (
@@ -178,8 +179,6 @@ export function GoalForm({
                 aria-pressed={mode === value}
                 onClick={() => {
                   setMode(value);
-                  if (value === "milestone")
-                    setProgress(progress === 100 ? 100 : 0);
                 }}
               >
                 <strong>{label}</strong>
@@ -188,6 +187,15 @@ export function GoalForm({
             ))}
           </div>
         </fieldset>
+        <button
+          type="button"
+          className="text-button"
+          onClick={() => setMode("none")}
+        >
+          {mode === "none"
+            ? "Chưa đặt thước đo · có thể thêm sau"
+            : "Đặt thước đo sau"}
+        </button>
         {mode === "numeric" && (
           <>
             <div className="form-row">
@@ -320,37 +328,26 @@ export function GoalForm({
           </div>
         )}
         {mode === "progress" && (
-          <label>
-            Tiến độ hiện tại · {progress}%
-            <input
-              aria-label="Tiến độ hiện tại"
-              type="range"
-              min={0}
-              max={100}
-              value={progress}
-              onChange={(e) => setProgress(Number(e.target.value))}
-            />
-          </label>
+          <p className="muted small">
+            Mục tiêu cũ đang lưu {progress}%. Bạn có thể chọn một thước đo cụ
+            thể ở trên; dữ liệu cũ được giữ cho đến khi lưu.
+          </p>
         )}
-        {mode === "milestone" && (
-          <>
-            <MilestoneSelect
-              value={kind}
-              onChange={(v) => {
-                setKind(v);
-                setColor(MILESTONE_COLORS[v]);
-              }}
-            />
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={progress === 100}
-                onChange={(e) => setProgress(e.target.checked ? 100 : 0)}
-              />
-              Đã đạt cột mốc này
-            </label>
-          </>
-        )}
+        <label>
+          Quỹ giờ mỗi tuần (tùy chọn)
+          <input
+            name="weekly_hours"
+            type="number"
+            min={0}
+            max={168}
+            step={0.5}
+            defaultValue={goal?.weekly_hours || 0}
+          />
+          <small>
+            Thời gian dự kiến dành cho mục tiêu. Có thể điều chỉnh riêng từng
+            tuần.
+          </small>
+        </label>
         <ColorPicker color={color} onChange={setColor} />
         <div className="form-row">
           <label>
@@ -370,11 +367,6 @@ export function GoalForm({
               value={scope}
               onChange={(e) => {
                 setScope(e.target.value);
-                const s = semesters[Number(e.target.value)];
-                if (e.target.value !== "" && s) {
-                  setStart(s.start);
-                  setEnd(s.end);
-                }
               }}
             >
               <option value="">Nhiều kỳ / tự chọn khoảng ngày</option>
@@ -387,10 +379,13 @@ export function GoalForm({
           </label>
         </div>
         <label>
-          Thời gian cột mốc
+          Ngày đích của mục tiêu
           <select
             value={timing}
-            onChange={(e) => setTiming(e.target.value as typeof timing)}
+            onChange={(e) => {
+              setTiming(e.target.value as typeof timing);
+              if (!start) setStart(end);
+            }}
           >
             <option value="fixed">Ngày đã chốt · dấu góc</option>
             <option value="window">Khoảng đã xác định · ví dụ tuần thi</option>
@@ -400,29 +395,26 @@ export function GoalForm({
           </select>
         </label>
         <div className="form-row">
-          <DatePicker
-            label={
-              timing === "fixed"
-                ? "Bắt đầu mục tiêu (tùy chọn)"
-                : "Khoảng bắt đầu"
-            }
-            value={start}
-            onChange={(day) => {
-              setStart(day);
-              if (day && day > end) setEnd(day);
-            }}
-            optional
-          />
+          {timing !== "fixed" && (
+            <DatePicker
+              label="Khoảng bắt đầu"
+              value={start}
+              onChange={(day) => {
+                setStart(day);
+                if (day && day > end) setEnd(day);
+              }}
+            />
+          )}
           <DatePicker
             label="Hạn hoàn thành"
             value={end}
             onChange={setEnd}
-            min={start || undefined}
+            min={timing === "fixed" ? undefined : start || undefined}
           />
         </div>
         <p className="muted small">
-          Nền ô thể hiện giờ đã làm. Cột mốc dùng dấu góc hoặc dải nền riêng,
-          không cộng vào năng suất.
+          Chỉ đánh dấu ngày hoặc khoảng diễn ra, không kéo từ hôm nay đến hạn.
+          Ví dụ Hackathon 3 ngày, hoặc 1–2 tuần cuối tháng 11 nếu hạn chưa chốt.
         </p>
         {timing !== "fixed" && (
           <label>
