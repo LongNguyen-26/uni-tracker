@@ -29,7 +29,7 @@ test("Excel date and time cells produce unambiguous calendar values, with sheet 
   const file = new File([bytes], "schedule.xlsx");
   const result = await extractFile(file, () => {});
   assert.equal(result.sheets?.length, 2);
-  const rows = parseTable(result.text, "session", "2026-09-07");
+  const rows = parseTable(result.text, "timetable", "2026-09-07");
   assert.equal(rows[0].date, "2026-09-07");
   assert.equal(rows[0].start_time, "09:00");
   assert.equal(rows[0].end_time, "10:00");

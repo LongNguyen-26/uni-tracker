@@ -74,7 +74,7 @@ export function summarizeDays(goals: Goal[], activities: Activity[]) {
       });
     return map.get(day)!;
   }
-  goals.forEach((g) => get(g.deadline).deadlines.push(g));
+  goals.forEach((g) => { if (g.deadline) get(g.deadline).deadlines.push(g); });
   activities.forEach((a) => {
     const day = get(a.occurred_on);
     day.activities.push(a);

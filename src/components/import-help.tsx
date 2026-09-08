@@ -1,12 +1,15 @@
 "use client";
 import { useState } from "react";
+import type { ImportContext } from "@/lib/importer";
 import { aiImportPrompt, importTemplate } from "@/lib/import-guide";
 
 export default function ImportHelp({
   day,
   termEnd,
   onSkip,
+  context = "schedule",
 }: {
+  context?: ImportContext;
   day: string;
   termEnd: string;
   onSkip?: () => void;
@@ -15,7 +18,7 @@ export default function ImportHelp({
     [showPrompt, setShowPrompt] = useState(false);
   function download() {
     const url = URL.createObjectURL(
-      new Blob(["\uFEFF", importTemplate(day, termEnd)], {
+      new Blob(["\uFEFF", importTemplate(day, termEnd, context)], {
         type: "text/csv;charset=utf-8",
       }),
     );
@@ -41,7 +44,7 @@ export default function ImportHelp({
           className="button primary"
           onClick={async () => {
             try {
-              await navigator.clipboard.writeText(aiImportPrompt(day, termEnd));
+              await navigator.clipboard.writeText(aiImportPrompt(day, termEnd, context));
               setCopied(true);
             } catch {
               setShowPrompt(true);
@@ -64,7 +67,7 @@ export default function ImportHelp({
         <textarea
           aria-label="Prompt cho AI"
           readOnly
-          value={aiImportPrompt(day, termEnd)}
+          value={aiImportPrompt(day, termEnd, context)}
           rows={12}
           onFocus={(e) => e.currentTarget.select()}
         />

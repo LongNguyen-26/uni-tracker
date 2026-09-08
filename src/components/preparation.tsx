@@ -12,11 +12,13 @@ export default function Preparation({
   onSave,
   onImport,
   onSkip,
+  onConfirmed,
 }: {
   profile: Profile;
   onSave: (p: Profile) => Promise<void>;
   onImport: () => void;
   onSkip: () => void;
+  onConfirmed?: () => void;
 }) {
   const terms = journeySettings(profile);
   const initial =
@@ -41,6 +43,7 @@ export default function Preparation({
         ],
       });
       setReady(true);
+      onConfirmed?.();
     } catch (e) {
       setError(errorMessage(e));
     } finally {

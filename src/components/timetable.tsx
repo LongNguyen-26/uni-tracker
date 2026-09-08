@@ -248,13 +248,13 @@ export default function Timetable({
             const r = id
               ? await db
                   .from("timetable_entries")
-                  .update(data)
+                  .update(data[0])
                   .eq("id", id)
                   .select("id")
                   .single()
               : await db
                   .from("timetable_entries")
-                  .insert({ ...data, user_id: userId });
+                  .insert(data.map((r) => ({ ...r, user_id: userId })));
             if (r.error) throw r.error;
             await onChanged();
           }}
@@ -300,7 +300,7 @@ function TimetableForm({
   profile: Profile;
   goals: Goal[];
   onClose: () => void;
-  onSave: (data: TimetableInput, id?: string) => Promise<void>;
+  onSave: (data: TimetableInput[], id?: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
   const semesters = journeySemesters(profile),
@@ -308,8 +308,8 @@ function TimetableForm({
       semesters.find((s) => s.start <= todayKey() && s.end >= todayKey()) ||
       semesters[0];
   const [allDay, setAllDay] = useState(entry?.all_day || false);
-  const [term, setTerm] = useState(entry?.semester_index ?? current.index),
-    [from, setFrom] = useState(entry?.valid_from || current.start),
+  const [weekdays, setWeekdays] = useState<number[]>([entry?.weekday ?? 0]);
+  const [from, setFrom] = useState(entry?.valid_from || current.start),
     [until, setUntil] = useState(entry?.valid_until || current.end),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -330,20 +330,23 @@ function TimetableForm({
         until < from
       )
         throw new Error("Kiểm tra khoảng ngày và giờ kết thúc.");
+      if (!allDay && !weekdays.length) throw new Error("Chọn ít nhất một thứ.");
       await onSave(
-        {
+        (allDay ? [0] : weekdays).map((weekday) => ({
           title: String(f.get("title")).trim(),
           goal_id: String(f.get("goal_id") || "") || null,
           all_day: allDay,
-          kind: f.get("kind") as "class" | "fixed",
-          semester_index: term,
-          weekday: Number(f.get("weekday")),
+          kind: entry?.kind || "fixed",
+          semester_index:
+            semesters.find((s) => from >= s.start && from <= s.end)?.index ??
+            null,
+          weekday,
           start_minute: start,
           end_minute: end,
           valid_from: from,
           valid_until: until,
           notes: String(f.get("notes") || ""),
-        },
+        })),
         entry?.id,
       );
       onClose();
@@ -371,32 +374,23 @@ function TimetableForm({
             defaultValue={entry?.title}
           />
         </label>
-        <div className="form-row">
-          <label>
-            Loại
-            <select name="kind" defaultValue={entry?.kind || "class"}>
-              <option value="class">Lớp học trên trường</option>
-              <option value="fixed">Việc cố định</option>
-            </select>
-          </label>
-          <label>
-            Học kỳ
-            <select
-              value={term}
-              onChange={(e) => {
-                const n = Number(e.target.value);
-                setTerm(n);
-                setFrom(semesters[n].start);
-                setUntil(semesters[n].end);
-              }}
-            >
-              {semesters.map((s) => (
-                <option key={s.index} value={s.index}>
-                  Năm {s.year} · {s.label}
-                </option>
-              ))}
-            </select>
-          </label>
+        <div className="row-actions">
+          <button
+            type="button"
+            className="button"
+            aria-pressed={!allDay}
+            onClick={() => setAllDay(false)}
+          >
+            Lặp hằng tuần
+          </button>
+          <button
+            type="button"
+            className="button"
+            aria-pressed={allDay}
+            onClick={() => setAllDay(true)}
+          >
+            Sự kiện cả ngày
+          </button>
         </div>
         <label>
           Gắn mục tiêu (tùy chọn)
@@ -409,34 +403,30 @@ function TimetableForm({
             ))}
           </select>
         </label>
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={allDay}
-            onChange={(e) => setAllDay(e.target.checked)}
-          />
-          Sự kiện cả ngày, liên tục trong khoảng ngày
-        </label>
         {!allDay && (
           <>
-            <label>
-              Thứ
-              <select name="weekday" defaultValue={entry?.weekday ?? 0}>
-                {[
-                  "Thứ Hai",
-                  "Thứ Ba",
-                  "Thứ Tư",
-                  "Thứ Năm",
-                  "Thứ Sáu",
-                  "Thứ Bảy",
-                  "Chủ nhật",
-                ].map((d, i) => (
-                  <option key={i} value={i}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <fieldset className="weekday-choice">
+              <legend>Lặp vào</legend>
+              {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((d, i) => (
+                <label key={d}>
+                  <input
+                    type={entry ? "radio" : "checkbox"}
+                    name="weekday"
+                    checked={weekdays.includes(i)}
+                    onChange={(e) =>
+                      setWeekdays(
+                        entry
+                          ? [i]
+                          : e.target.checked
+                            ? [...weekdays, i]
+                            : weekdays.filter((x) => x !== i),
+                      )
+                    }
+                  />
+                  {d}
+                </label>
+              ))}
+            </fieldset>
             <div className="form-row">
               <label>
                 Bắt đầu
@@ -454,7 +444,10 @@ function TimetableForm({
                 Kết thúc
                 <input
                   name="end"
-                  type="time"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="HH:mm"
+                  pattern="([01][0-9]|2[0-3]):[0-5][0-9]"
                   required
                   defaultValue={minuteClock(entry?.end_minute ?? 600)}
                 />
@@ -637,8 +630,13 @@ function WeekPlanner({
         <p className="muted small">
           Deadline gần:{" "}
           {goals
-            .filter((g) => g.progress < 100 && g.deadline >= target)
-            .sort((a, b) => a.deadline.localeCompare(b.deadline))
+            .filter(
+              (g): g is Goal & { deadline: string } =>
+                g.progress < 100 && !!g.deadline && g.deadline >= target,
+            )
+            .sort((a, b) =>
+              (a.deadline || "9999").localeCompare(b.deadline || "9999"),
+            )
             .slice(0, 3)
             .map((g) => `${g.title} (${formatDate(g.deadline)})`)
             .join(" · ") || "Chưa có"}

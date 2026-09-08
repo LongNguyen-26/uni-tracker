@@ -18,12 +18,13 @@ import {
 } from "./planning";
 import { isWork, splitColor } from "./focus";
 
+import { milestonesOnDay } from "./milestones";
 export type TimetableEntry = {
   id: string;
   user_id: string;
   title: string;
   kind: "class" | "fixed";
-  semester_index: number;
+  semester_index: number | null;
   weekday: number;
   start_minute: number;
   end_minute: number;
@@ -199,6 +200,7 @@ export function weekCapacity(
     (g) =>
       (g.reserved_hours || 0) > 0 &&
       g.progress < 100 &&
+      !!g.deadline &&
       g.deadline >= week &&
       (g.starts_on || g.deadline) <= addDays(week, 6),
   );
@@ -209,7 +211,10 @@ export function weekCapacity(
         ((g.reserved_hours || 0) *
           60 *
           days.filter(
-            (d) => d >= (g.starts_on || g.deadline) && d <= g.deadline,
+            (d) =>
+              !!g.deadline &&
+              d >= (g.starts_on || g.deadline) &&
+              d <= g.deadline,
           ).length) /
           7,
       0,
@@ -259,7 +264,9 @@ export function distributeWeek(
   let unallocated = 0;
   for (const g of goals
     .filter((g) => g.progress < 100)
-    .sort((a, b) => a.deadline.localeCompare(b.deadline))) {
+    .sort((a, b) =>
+      (a.deadline || "9999").localeCompare(b.deadline || "9999"),
+    )) {
     const fixedForGoal = daysForWeek(week).reduce(
       (n, day) =>
         n +
@@ -354,16 +361,23 @@ export function dayVisual(
       ),
     ),
   ];
-  const ranges = goals.filter(
-    (g) =>
-      timingMode(g) !== "fixed" &&
-      day >= (g.starts_on || g.deadline) &&
-      day <= g.deadline,
-  );
+  const markers = milestonesOnDay(goals, day);
+  const ranges = markers
+    .filter((m) => m.start !== m.end)
+    .map((m) => ({
+      ...m.goal,
+      title: m.step.title,
+      starts_on: m.start,
+      deadline: m.end,
+      timing_mode: m.step.timing_mode,
+    }));
   const fixed = goals.filter(
     (g) => timingMode(g) === "fixed" && g.deadline === day,
   );
   return {
+    markers,
+    intermediate: markers.filter((m) => !m.step.is_final),
+    finalMarkers: markers.filter((m) => m.step.is_final && m.end === day),
     minutes,
     plans,
     ranges,
@@ -371,8 +385,10 @@ export function dayVisual(
     background: splitColor(colors.length ? colors : plannedColors),
     corner: splitColor(fixed.map((g) => g.color)),
     planned: plans.length > 0,
-    rangeBackground: splitColor(ranges.map((g) => g.color + "20")),
-    uncertain: ranges.some((g) => timingMode(g) === "flexible"),
+    rangeBackground: splitColor(
+      markers.filter((m) => m.start !== m.end).map((m) => m.goal.color + "20"),
+    ),
+    uncertain: markers.some((m) => m.step.timing_mode === "flexible"),
   };
 }
 

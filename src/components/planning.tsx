@@ -20,6 +20,9 @@ import {
 } from "lucide-react";
 import Dialog from "./dialog";
 import DatePicker from "./date-picker";
+import SessionEditor from "./session-editor";
+import ImportHelp from "./import-help";
+import { journeySemesters } from "@/lib/schedule";
 import Timetable from "./timetable";
 import type { TimetableEntry } from "@/lib/schedule";
 import { getSupabase } from "@/lib/supabase";
@@ -37,10 +40,8 @@ import {
   clockText,
   localDateTime,
   monday,
-  repeatedSessions,
   sessionElapsed,
   type FocusSession,
-  type SessionInput,
   type WeeklyBudget,
 } from "@/lib/planning";
 
@@ -264,10 +265,34 @@ export default function PlanningHub({
                 onClick={() => (userId ? setEdit("new") : onAuth())}
               >
                 <Plus size={17} />
-                Thêm phiên học
+                Thêm phiên
               </button>
             </div>
           </div>
+          {userId && (!goals.length || !timetable.length) && (
+            <details
+              className="import-help"
+              open={!goals.length && !sessions.length}
+            >
+              <summary>Chuẩn bị tuần của bạn</summary>
+              <p>
+                {!timetable.length
+                  ? "Bạn có thể nhập TKB trước để thấy khoảng trống. Nếu không có lịch cố định, thêm mục tiêu rồi đặt phiên bất cứ lúc nào."
+                  : "Thêm mục tiêu để phân bổ thời gian theo điều bạn muốn đạt."}
+              </p>
+              <ImportHelp
+                day={todayKey()}
+                termEnd={
+                  journeySemesters(profile).find(
+                    (s) => s.start <= todayKey() && s.end >= todayKey(),
+                  )?.end || todayKey()
+                }
+              />
+              <button className="button" onClick={() => onImport("timetable")}>
+                Nhập thời khóa biểu
+              </button>
+            </details>
+          )}
           <div className="week-nav">
             <button
               className="icon-button"
@@ -506,28 +531,14 @@ export default function PlanningHub({
         </div>
       )}
       {edit && (
-        <SessionForm
+        <SessionEditor
           session={edit === "new" ? undefined : edit}
           goals={goals}
-          profile={profile}
+          userId={userId}
           onClose={() => setEdit(null)}
-          onSave={async (rows, id) => {
-            if (!userId) return;
-            const db = getSupabase()!;
-            const r = id
-              ? await db
-                  .from("focus_sessions")
-                  .update(rows[0])
-                  .eq("id", id)
-                  .eq("status", "planned")
-                  .select()
-                  .single()
-              : await db.from("focus_sessions").upsert(
-                  rows.map((r) => ({ ...r, user_id: userId })),
-                  { onConflict: "id", ignoreDuplicates: true },
-                );
-            if (r.error) throw r.error;
+          onSaved={async () => {
             await reload();
+            await onChanged();
           }}
         />
       )}
@@ -565,198 +576,6 @@ export default function PlanningHub({
         />
       )}
     </>
-  );
-}
-
-function SessionForm({
-  session,
-  goals,
-  onClose,
-  onSave,
-}: {
-  session?: FocusSession;
-  goals: Goal[];
-  profile: Profile;
-  onClose: () => void;
-  onSave: (
-    rows: (SessionInput & { id: string })[],
-    id?: string,
-  ) => Promise<void>;
-}) {
-  const [start, setStart] = useState(
-      session
-        ? session.is_unscheduled
-          ? `${localDateTime(session.scheduled_start).slice(0, 10)}T09:00`
-          : localDateTime(session.scheduled_start)
-        : `${todayKey()}T09:00`,
-    ),
-    [end, setEnd] = useState(
-      session
-        ? session.is_unscheduled
-          ? localDateTime(
-              new Date(
-                new Date(
-                  `${localDateTime(session.scheduled_start).slice(0, 10)}T09:00`,
-                ).getTime() +
-                  session.planned_minutes * 60000,
-              ).toISOString(),
-            )
-          : localDateTime(session.scheduled_end)
-        : `${todayKey()}T10:00`,
-    ),
-    [weeks, setWeeks] = useState(1),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
-  const ids = useRef<string[]>([]);
-  async function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const f = new FormData(e.currentTarget);
-    setBusy(true);
-    setError("");
-    try {
-      const minutes = Math.round(
-        (new Date(end).getTime() - new Date(start).getTime()) / 60000,
-      );
-      const input: SessionInput = {
-        title: String(f.get("title")).trim(),
-        notes: String(f.get("notes") || "").trim(),
-        goal_id: String(f.get("goal") || "") || null,
-        is_unscheduled: false,
-        scheduled_start: new Date(start).toISOString(),
-        scheduled_end: new Date(end).toISOString(),
-        planned_minutes: minutes,
-        timezone:
-          session?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
-      };
-      const rows = repeatedSessions(input, weeks, [], false).map((r, i) => ({
-        ...r,
-        id: ids.current[i] || (ids.current[i] = crypto.randomUUID()),
-      }));
-      if (!rows.length)
-        throw new Error(
-          "Tất cả phiên nằm trong kỳ nghỉ; hãy đổi khoảng ngày hoặc bỏ tùy chọn bỏ ngày nghỉ.",
-        );
-      await onSave(rows, session?.id);
-      onClose();
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Dialog
-      title={session ? "Chỉnh sửa phiên" : "Phân bổ một phiên tập trung"}
-      description="Đồng hồ đếm ngược bằng thời lượng giữa giờ bắt đầu và kết thúc."
-      onClose={() => {
-        if (!busy) onClose();
-      }}
-    >
-      <form className="form" onSubmit={submit}>
-        <label>
-          Tên hoạt động
-          <input
-            name="title"
-            required
-            maxLength={160}
-            defaultValue={session?.title}
-            placeholder="Thực nghiệm Paper, luyện IELTS…"
-          />
-        </label>
-        <label>
-          Mục tiêu
-          <select name="goal" defaultValue={session?.goal_id || ""}>
-            <option value="">Không gắn mục tiêu</option>
-            {goals.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.title}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="form-row">
-          <label>
-            Giờ bắt đầu
-            <input
-              type="datetime-local"
-              required
-              value={start}
-              onChange={(e) => {
-                const next = e.target.value;
-                const span =
-                  new Date(end).getTime() - new Date(start).getTime();
-                setStart(next);
-                if (next && Number.isFinite(span) && span > 0)
-                  setEnd(
-                    localDateTime(
-                      new Date(new Date(next).getTime() + span).toISOString(),
-                    ),
-                  );
-              }}
-            />
-          </label>
-          <label>
-            Giờ kết thúc
-            <input
-              type="datetime-local"
-              required
-              value={end}
-              onChange={(e) => setEnd(e.target.value)}
-            />
-          </label>
-        </div>
-        <p className="muted small">
-          {end > start
-            ? formatMinutes(
-                Math.round(
-                  (new Date(end).getTime() - new Date(start).getTime()) / 60000,
-                ),
-              )
-            : "Chọn giờ kết thúc sau bắt đầu"}{" "}
-          · giờ địa phương trên thiết bị
-        </p>
-        {!session && (
-          <>
-            <label>
-              Áp dụng trong bao nhiêu tuần?
-              <input
-                type="number"
-                min={1}
-                max={52}
-                required
-                value={weeks}
-                onChange={(e) => setWeeks(Number(e.target.value))}
-              />
-            </label>
-            <p className="muted small">
-              Tạo tối đa {weeks} phiên, cùng thứ và khung giờ, từ{" "}
-              {start.slice(0, 10)} đến{" "}
-              {addDays(
-                start.slice(0, 10) || todayKey(),
-                Math.max(0, weeks - 1) * 7,
-              )}
-              .
-            </p>
-          </>
-        )}
-        <label>
-          Ghi chú
-          <textarea
-            name="notes"
-            maxLength={4000}
-            defaultValue={session?.notes}
-          />
-        </label>
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        )}
-        <button className="button primary" disabled={busy}>
-          {busy ? "Đang lưu…" : session ? "Lưu phiên" : "Tạo phiên học"}
-        </button>
-      </form>
-    </Dialog>
   );
 }
 

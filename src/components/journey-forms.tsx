@@ -1,6 +1,7 @@
 "use client";
 import { useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import MilestoneEditor from "./milestone-editor";
+import { goalSteps, finalDates, measuredSteps } from "@/lib/milestones";
 import Dialog from "./dialog";
 import DatePicker from "./date-picker";
 import { ColorPicker } from "./forms";
@@ -10,7 +11,6 @@ import {
   academicSettings,
   journeySettings,
   moveSemester,
-  timingMode,
   clockMinutes,
   minuteClock,
 } from "@/lib/schedule";
@@ -34,7 +34,6 @@ import {
 
 export function GoalForm({
   goal,
-  defaultDate,
   semesters,
   onClose,
   onSave,
@@ -60,14 +59,25 @@ export function GoalForm({
   );
   const [steps, setSteps] = useState<GoalStep[]>(
     goal?.tracking_mode === "milestone"
-      ? [{ id: "completion", title: goal.title, done: goal.progress === 100 }]
-      : goal?.checklist || [],
+      ? goalSteps({
+          ...goal,
+          checklist: [
+            {
+              id: "completion",
+              title: goal.title,
+              done: goal.progress === 100,
+            },
+          ],
+        })
+      : goal
+        ? goalSteps(goal)
+        : [],
   );
-  const [start, setStart] = useState(goal?.starts_on || "");
-  const [timing, setTiming] = useState<"fixed" | "window" | "flexible">(
-    goal ? timingMode(goal) : "fixed",
-  );
-  const [end, setEnd] = useState(goal?.deadline || defaultDate);
+  const {
+    deadline: end,
+    starts_on: start,
+    timing_mode: timing,
+  } = finalDates(steps);
   const [completed, setCompleted] = useState(goal?.completed_on || todayKey());
   const [scope, setScope] = useState(goal?.semester_index?.toString() ?? "");
   const [busy, setBusy] = useState(false);
@@ -87,15 +97,17 @@ export function GoalForm({
     setError("");
     try {
       if (
-        !validDate(end) ||
-        (timing !== "fixed" && start && (!validDate(start) || start > end))
+        (end && !validDate(end)) ||
+        (timing !== "fixed" &&
+          start &&
+          (!validDate(start) || !end || start > end))
       )
         throw new Error("Khoảng thời gian chưa hợp lệ.");
-      if (timing !== "fixed" && !start)
+      if (end && timing !== "fixed" && !start)
         throw new Error("Hãy chọn ngày đầu của khoảng thời gian.");
       if (
         mode === "checklist" &&
-        (!steps.length || steps.some((s) => !s.title.trim()))
+        (!measuredSteps(steps).length || steps.some((s) => !s.title.trim()))
       )
         throw new Error("Hãy đặt tên cho ít nhất một cột mốc dự án.");
       if (isGreen(color))
@@ -249,84 +261,6 @@ export function GoalForm({
             </div>
           </>
         )}
-        {mode === "checklist" && (
-          <div className="step-editor">
-            <div className="section-row">
-              <strong>Cột mốc dự án · {derived}%</strong>
-              <button
-                className="text-button"
-                type="button"
-                onClick={() =>
-                  setSteps(
-                    [
-                      "Đề cương",
-                      "Thực nghiệm",
-                      "Viết bản thảo",
-                      "Nộp Paper",
-                    ].map((title) => ({
-                      id: crypto.randomUUID(),
-                      title,
-                      done: false,
-                    })),
-                  )
-                }
-              >
-                Dùng mẫu Paper
-              </button>
-            </div>
-            {steps.map((s, i) => (
-              <div className="step-row" key={s.id}>
-                <input
-                  aria-label={`Hoàn thành bước ${i + 1}`}
-                  type="checkbox"
-                  checked={s.done}
-                  onChange={(e) =>
-                    setSteps(
-                      steps.map((x) =>
-                        x.id === s.id ? { ...x, done: e.target.checked } : x,
-                      ),
-                    )
-                  }
-                />
-                <input
-                  aria-label={`Tên bước ${i + 1}`}
-                  required
-                  maxLength={160}
-                  value={s.title}
-                  onChange={(e) =>
-                    setSteps(
-                      steps.map((x) =>
-                        x.id === s.id ? { ...x, title: e.target.value } : x,
-                      ),
-                    )
-                  }
-                />
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label={`Xóa bước ${i + 1}`}
-                  onClick={() => setSteps(steps.filter((x) => x.id !== s.id))}
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))}
-            <button
-              className="button"
-              type="button"
-              disabled={steps.length >= 100}
-              onClick={() =>
-                setSteps([
-                  ...steps,
-                  { id: crypto.randomUUID(), title: "", done: false },
-                ])
-              }
-            >
-              <Plus size={16} />
-              Thêm cột mốc
-            </button>
-          </div>
-        )}
         {mode === "progress" && (
           <p className="muted small">
             Mục tiêu cũ đang lưu {progress}%. Bạn có thể chọn một thước đo cụ
@@ -378,44 +312,11 @@ export function GoalForm({
             </select>
           </label>
         </div>
-        <label>
-          Ngày đích của mục tiêu
-          <select
-            value={timing}
-            onChange={(e) => {
-              setTiming(e.target.value as typeof timing);
-              if (!start) setStart(end);
-            }}
-          >
-            <option value="fixed">Ngày đã chốt · dấu góc</option>
-            <option value="window">Khoảng đã xác định · ví dụ tuần thi</option>
-            <option value="flexible">
-              Ngày chưa chốt trong khoảng · ví dụ đầu tháng 12
-            </option>
-          </select>
-        </label>
-        <div className="form-row">
-          {timing !== "fixed" && (
-            <DatePicker
-              label="Khoảng bắt đầu"
-              value={start}
-              onChange={(day) => {
-                setStart(day);
-                if (day && day > end) setEnd(day);
-              }}
-            />
-          )}
-          <DatePicker
-            label="Hạn hoàn thành"
-            value={end}
-            onChange={setEnd}
-            min={timing === "fixed" ? undefined : start || undefined}
-          />
-        </div>
-        <p className="muted small">
-          Chỉ đánh dấu ngày hoặc khoảng diễn ra, không kéo từ hôm nay đến hạn.
-          Ví dụ Hackathon 3 ngày, hoặc 1–2 tuần cuối tháng 11 nếu hạn chưa chốt.
-        </p>
+        <MilestoneEditor
+          value={steps}
+          onChange={setSteps}
+          checklist={mode === "checklist"}
+        />
         {timing !== "fixed" && (
           <label>
             Giờ cần giữ lại mỗi tuần trong khoảng này
@@ -474,10 +375,14 @@ export function GoalForm({
 }
 
 export function SettingsForm({
+  onExport,
+  onRestore,
   profile,
   onSave,
   onClose,
 }: {
+  onExport?: () => void;
+  onRestore?: () => void;
   profile: Profile;
   onSave: (data: Profile) => Promise<void>;
   onClose: () => void;
@@ -684,6 +589,21 @@ export function SettingsForm({
         >
           Tạo liên kết mẫu lịch cho bạn cùng trường
         </button>
+        <section className="backup-settings">
+          <h3>Sao lưu dữ liệu</h3>
+          <p className="muted small">
+            Giữ đủ mục tiêu, cột mốc, giờ chính xác và liên kết. Nhập lại bổ
+            sung sau khi đối chiếu.
+          </p>
+          <div className="row-actions">
+            <button type="button" className="button" onClick={onExport}>
+              Xuất dữ liệu
+            </button>
+            <button type="button" className="button" onClick={onRestore}>
+              Nhập lại toàn bộ
+            </button>
+          </div>
+        </section>
         {share && (
           <label>
             Liên kết mẫu lịch

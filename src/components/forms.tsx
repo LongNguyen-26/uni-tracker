@@ -2,17 +2,13 @@
 import { useId, useState, type FormEvent } from "react";
 import { ArrowRight, Eye, EyeOff, LoaderCircle } from "lucide-react";
 import Dialog from "./dialog";
-import DatePicker from "./date-picker";
-import { localDateTime } from "@/lib/planning";
+import SessionEditor from "./session-editor";
 import { getSupabase } from "@/lib/supabase";
 import { errorMessage } from "@/lib/errors";
 export { errorMessage } from "@/lib/errors";
 import {
   GOAL_COLORS,
-  MILESTONE_COLORS,
   MILESTONE_LABELS,
-  todayKey,
-  addDays,
   type MilestoneKind,
   type ActivityInput,
   type Goal,
@@ -301,266 +297,89 @@ export function AuthForm({
   );
 }
 
-export function ActivityForm({
-  activity,
-  goals,
-  defaultDate,
-  onClose,
-  onSave,
-}: {
+export function ActivityForm(props: {
   activity?: Activity;
   goals: Goal[];
   defaultDate: string;
   onClose: () => void;
   onSave: (data: ActivityInput, id?: string) => Promise<void>;
 }) {
-  const [day, setDay] = useState(activity?.occurred_on || defaultDate);
-  const [start, setStart] = useState(
-    activity?.started_at ? localDateTime(activity.started_at, true) : "",
+  return props.activity && props.activity.kind !== "event" ? (
+    <ProgressEntryEditor
+      activity={props.activity}
+      onClose={props.onClose}
+      onSave={props.onSave}
+    />
+  ) : (
+    <SessionEditor
+      activity={props.activity}
+      goals={props.goals}
+      defaultDate={props.defaultDate}
+      onClose={props.onClose}
+      onSaveActivity={props.onSave}
+    />
   );
-  const [end, setEnd] = useState(
-    activity?.ended_at ? localDateTime(activity.ended_at, true) : "",
-  );
-  const [goalId, setGoalId] = useState(activity?.goal_id || "");
-  const [color, setColor] = useState(activity?.color || GOAL_COLORS[0]);
-  const [isMilestone, setIsMilestone] = useState(
-    activity?.is_milestone || false,
-  );
-  const [milestoneKind, setMilestoneKind] = useState<MilestoneKind>(
-    activity?.milestone_kind || "achievement",
-  );
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  async function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const data = new FormData(e.currentTarget);
-    setBusy(true);
-    setError("");
-    try {
-      const title = String(data.get("title")).trim();
-      if (!title) throw new Error("Hãy nhập tên hoạt động.");
-      if (
-        (start && !end) ||
-        (!start && end) ||
-        (start &&
-          (end <= start ||
-            start.slice(0, 10) !== day ||
-            (end.slice(0, 10) !== day &&
-              end !== `${addDays(day, 1)}T00:00:00`)))
-      )
-        throw new Error(
-          "Giờ bắt đầu và kết thúc cần nằm trong ngày ghi nhận, kết thúc sau bắt đầu.",
-        );
-      const duration =
-        activity && activity.kind !== "event"
-          ? 0
-          : Number(data.get("duration_minutes") || 0) +
-            Number(data.get("duration_seconds") || 0) / 60;
-      if (
-        duration > 1440 ||
-        (start &&
-          duration * 60000 >
-            new Date(end).getTime() - new Date(start).getTime() + 1000)
-      )
-        throw new Error(
-          "Thời gian thực làm không thể dài hơn khoảng giờ đã nhập.",
-        );
-      await onSave(
-        {
-          title,
-          started_at: start
-            ? activity?.started_at &&
-              start === localDateTime(activity.started_at, true)
-              ? activity.started_at
-              : new Date(start).toISOString()
-            : null,
-          ended_at: end
-            ? activity?.ended_at &&
-              end === localDateTime(activity.ended_at, true)
-              ? activity.ended_at
-              : new Date(end).toISOString()
-            : null,
-          notes: String(data.get("notes")).trim(),
-          occurred_on: day,
-          goal_id: goalId || null,
-          color,
-          duration_minutes: duration,
-          is_milestone: isMilestone,
-          milestone_kind: isMilestone ? milestoneKind : "general",
-        },
-        activity?.id,
-      );
-      onClose();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
+}
+function ProgressEntryEditor({
+  activity,
+  onClose,
+  onSave,
+}: {
+  activity: Activity;
+  onClose: () => void;
+  onSave: (data: ActivityInput, id?: string) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
   return (
     <Dialog
-      title={activity ? "Chỉnh sửa hoạt động" : "Ghi lại một bước tiến"}
-      description="Một buổi học, một cột mốc, hay một điều đáng nhớ."
+      title="Sửa nội dung cập nhật tiến độ"
       onClose={() => {
         if (!busy) onClose();
       }}
     >
-      <form className="form" onSubmit={submit}>
-        {activity && activity.kind !== "event" && (
-          <p className="muted small">
-            Đây là lịch sử cập nhật mục tiêu. Bạn có thể sửa nội dung ghi nhận;
-            mức hiện tại được chỉnh trong mục tiêu tương ứng. Bản ghi này không
-            cộng vào giờ làm việc.
-          </p>
-        )}
+      <form
+        className="form"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const f = new FormData(e.currentTarget);
+          setBusy(true);
+          try {
+            await onSave(
+              {
+                ...activity,
+                title: String(f.get("title")).trim(),
+                notes: String(f.get("notes")).trim(),
+              },
+              activity.id,
+            );
+            onClose();
+          } catch (e) {
+            setError(errorMessage(e));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <p className="muted small">
+          Chỉ sửa nội dung lịch sử. Kết quả và thước đo được chỉnh trong mục
+          tiêu.
+        </p>
         <label>
-          Hoạt động đã hoàn thành
+          Nội dung
           <input
             name="title"
+            defaultValue={activity.title}
             required
             maxLength={160}
-            placeholder="Hôm nay bạn đã làm được gì?"
-            defaultValue={activity?.title}
           />
         </label>
-        <label>
-          Gắn với mục tiêu
-          <select
-            value={goalId}
-            onChange={(e) => {
-              setGoalId(e.target.value);
-              const goal = goals.find((g) => g.id === e.target.value);
-              if (goal) setColor(goal.color);
-            }}
-          >
-            <option value="">Không gắn mục tiêu</option>
-            {goals.map((g) => (
-              <option value={g.id} key={g.id}>
-                {g.title}
-              </option>
-            ))}
-          </select>
-        </label>
-        {activity?.goal_title && !activity.goal_id && (
-          <p className="muted small">
-            Lịch sử từ mục tiêu đã xóa: {activity.goal_title}
-          </p>
-        )}
-        <div className="form-row">
-          <DatePicker
-            label="Ngày diễn ra"
-            value={day}
-            onChange={setDay}
-            max={todayKey()}
-          />
-          <label>
-            Thời lượng (phút)
-            <input
-              type="number"
-              name="duration_minutes"
-              disabled={Boolean(activity && activity.kind !== "event")}
-              min={0}
-              max={1440}
-              step="any"
-              defaultValue={
-                activity?.duration_minutes
-                  ? Math.floor(Math.round(activity.duration_minutes * 60) / 60)
-                  : ""
-              }
-              placeholder="Ví dụ: 60"
-            />
-          </label>
-          <label>
-            Giây lẻ
-            <input
-              type="number"
-              name="duration_seconds"
-              min={0}
-              max={59}
-              step={1}
-              defaultValue={
-                Math.round((activity?.duration_minutes || 0) * 60) % 60
-              }
-              disabled={Boolean(activity && activity.kind !== "event")}
-            />
-          </label>
-        </div>
-        <div className="form-row">
-          <label>
-            Bắt đầu thực tế (tùy chọn)
-            <input
-              type="datetime-local"
-              step={1}
-              value={start}
-              onChange={(e) => {
-                const next = e.target.value;
-                const span =
-                  start && end
-                    ? new Date(end).getTime() - new Date(start).getTime()
-                    : Math.max(1, activity?.duration_minutes || 60) * 60000;
-                setStart(next);
-                if (next && Number.isFinite(new Date(next).getTime()))
-                  setEnd(
-                    localDateTime(
-                      new Date(new Date(next).getTime() + span).toISOString(),
-                      true,
-                    ),
-                  );
-              }}
-            />
-          </label>
-          <label>
-            Kết thúc thực tế
-            <input
-              type="datetime-local"
-              step={1}
-              value={end}
-              onChange={(e) => setEnd(e.target.value)}
-            />
-          </label>
-        </div>
-        <p className="muted small">
-          Nhập thời gian thực tế đã dành cho việc này. Để trống nếu chỉ muốn ghi
-          chú. Thời lượng là số phút thực sự làm việc, không tính thời gian nghỉ
-          giữa hai mốc giờ.
-        </p>
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={isMilestone}
-            onChange={(e) => {
-              setIsMilestone(e.target.checked);
-              if (e.target.checked && !goalId)
-                setColor(MILESTONE_COLORS[milestoneKind]);
-            }}
-          />
-          Đánh dấu đây là cột mốc đã đạt ★
-        </label>
-        {isMilestone && (
-          <MilestoneSelect
-            value={milestoneKind}
-            onChange={(kind) => {
-              setMilestoneKind(kind);
-              if (!goalId) setColor(MILESTONE_COLORS[kind]);
-            }}
-          />
-        )}
-        {goalId ? (
-          <p className="inherited-color">
-            <span className="color-dot" style={{ background: color }} />
-            Dùng màu của mục tiêu đã chọn.
-          </p>
-        ) : (
-          <ColorPicker color={color} onChange={setColor} />
-        )}
         <label>
           Ghi chú
           <textarea
             name="notes"
-            rows={4}
+            defaultValue={activity.notes}
             maxLength={4000}
-            placeholder="Lưu lại điều bạn đã học được…"
-            defaultValue={activity?.notes}
           />
         </label>
         {error && (
@@ -568,17 +387,9 @@ export function ActivityForm({
             {error}
           </p>
         )}
-        <div className="form-actions">
-          <button
-            type="button"
-            className="button"
-            onClick={onClose}
-            disabled={busy}
-          >
-            Hủy
-          </button>
-          <Submit busy={busy}>Lưu hoạt động</Submit>
-        </div>
+        <button disabled={busy} className="button primary">
+          Lưu nội dung
+        </button>
       </form>
     </Dialog>
   );

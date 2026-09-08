@@ -65,7 +65,7 @@ test("unknown goal names create one visible unmeasured goal while unknown UUIDs 
 });
 test("invalid or deselected goals only block their dependent rows", () => {
   const rows = prepare(
-    "kind,title,date,minutes,goal_id,current,target\ngoal,Invalid,2026-12-01,,,6,\nactivity,Linked,2026-09-08,30,Invalid,,\nactivity,Independent,2026-09-08,20,,,",
+    "kind,title,date,minutes,goal_id,current,target\ngoal,Invalid,2026-12-01,,,6,\nactivity,Linked,2026-09-08,30,Invalid,,\nfixed,Independent,2026-09-08,,,,",
   );
   assert.deepEqual(
     validImportRows(rows, [], today).map((r) => r.title),
@@ -85,7 +85,9 @@ test("status uses date unless explicitly supplied; duration-only intentions have
     rows.map((r) => r.kind),
     ["activity", "session", "session", "session", "activity"],
   );
-  assert.equal(validImportRows(rows, [], today).length, 4);
+  const goal = demoData(today).goals[0];
+  rows.forEach(r => r.goal_id = goal.id);
+  assert.equal(validImportRows(rows, [goal], today).length, 4);
   const payload = importPayload([rows[1]])[0];
   assert.ok("is_unscheduled" in payload && payload.is_unscheduled);
   const { profile } = demoData(today);
@@ -175,7 +177,7 @@ test("unmeasured backup goals do not acquire a numeric measure from default data
 });
 test("a malformed row does not block the other CSV records", () => {
   const rows = prepare(
-    "kind,title,date,minutes\nactivity,Valid,2026-09-08,30\nactivity,Invalid,2026-09-08,30,extra",
+    "kind,title,date,minutes\nfixed,Valid,2026-09-08,\nfixed,Invalid,2026-09-08,,extra",
   );
   assert.equal(rows.length, 2);
   assert.deepEqual(

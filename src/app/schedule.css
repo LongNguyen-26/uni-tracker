@@ -368,3 +368,61 @@
 .semester-card {
   min-width: 0;
 }
+
+.milestone-corner {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 65%;
+  height: 65%;
+  background: var(--milestone-color);
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+  pointer-events: none;
+  z-index: 2;
+}
+.milestone-corner:not(.done)::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  background: #fff;
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+}
+.milestone-edit-row {
+  padding: 12px 0;
+  border-bottom: 1px solid #dfe5dc;
+}
+.milestone-editor,
+.milestone-edit-row details {
+  display: grid;
+  gap: 10px;
+}
+.weekday-choice {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 0;
+  padding: 0;
+}
+.weekday-choice label {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.weekday-choice input {
+  width: auto;
+}
+.restore-row {
+  padding: 12px;
+  border-bottom: 1px solid #dfe5dc;
+  overflow-wrap: anywhere;
+}
+.restore-row pre {
+  max-height: 260px;
+  overflow: auto;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+.backup-settings {
+  border-top: 1px solid #dfe5dc;
+  padding-top: 20px;
+}

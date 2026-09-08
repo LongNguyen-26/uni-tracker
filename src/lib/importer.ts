@@ -1,11 +1,11 @@
 import Papa from "papaparse";
 import { clockMinutes, minuteClock, isGreen } from "./schedule";
+import { measuredSteps, goalSteps } from "./milestones";
 import { parseDate } from "./timeline";
 import {
   addDays,
   CATEGORIES,
   GOAL_COLORS,
-  todayKey,
   type Goal,
   type GoalInput,
   type ActivityInput,
@@ -13,8 +13,9 @@ import {
 } from "./timeline";
 import { calculatedProgress, monday, validDate } from "./planning";
 
+export type ImportContext = "schedule" | "goals" | "restore";
 export type ImportKind =
-  "goal" | "session" | "activity" | "budget" | "timetable";
+  "goal" | "milestone" | "session" | "activity" | "budget" | "timetable";
 export type ImportRow = {
   key: string;
   kind: ImportKind;
@@ -30,7 +31,7 @@ export type ImportRow = {
   notes: string;
   goal: Partial<GoalInput>;
   activity?: Partial<ActivityInput>;
-  timetable?: { kind: "class" | "fixed"; semester_index: number };
+  timetable?: { kind: "class" | "fixed"; semester_index: number | null };
   selected: boolean;
   issue: string;
   status?: "planned" | "completed";
@@ -43,6 +44,7 @@ export type ImportRow = {
 };
 export const labels: Record<ImportKind, string> = {
   goal: "Mục tiêu",
+  milestone: "Việc / cột mốc",
   session: "Hoạt động",
   activity: "Hoạt động",
   budget: "Quỹ giờ tuần",
@@ -128,6 +130,8 @@ function row(
     lichcodinh: "timetable",
     goal: "goal",
     muctieu: "goal",
+    milestone: "milestone",
+    cotmoc: "milestone",
     session: "session",
     phienhoc: "session",
     activity: "activity",
@@ -172,7 +176,8 @@ function row(
     if (d in weekdays) date = addDays(monday(anchor), weekdays[d]);
   }
   const missingGoalDate = !date && kind === "goal";
-  if (missingGoalDate) date = importDate(v.end_date) || todayKey();
+  if (!date && (kind === "goal" || kind === "milestone"))
+    date = importDate(v.end_date);
   const goal: Partial<GoalInput> = {};
   if (v.mode) goal.tracking_mode = String(v.mode) as Goal["tracking_mode"];
   if (v.current !== undefined && v.current !== "")
@@ -200,11 +205,12 @@ function row(
     );
   }
   // The measure is inferred from data. Empty legacy mode columns never force a fake measure.
-  goal.tracking_mode = goal.checklist?.length
-    ? "checklist"
-    : goal.metric_current !== undefined && goal.metric_target !== undefined
+  goal.tracking_mode =
+    goal.metric_current !== undefined && goal.metric_target !== undefined
       ? "numeric"
-      : "none";
+      : measuredSteps(goal.checklist || []).length
+        ? "checklist"
+        : "none";
   const status = normalize(String(v.status || ""));
   return {
     key: `row-${index}`,
@@ -224,7 +230,10 @@ function row(
       kind === "timetable"
         ? {
             kind: normalize(requested) === "fixed" ? "fixed" : "class",
-            semester_index: Number(input.semester_index || 0),
+            semester_index:
+              input.semester_index == null
+                ? null
+                : Number(input.semester_index),
           }
         : undefined,
     selected: true,
@@ -250,9 +259,10 @@ function row(
         : undefined,
     explicit_end: Boolean(v.end_date),
     all_day: kind === "timetable" && !v.start_time && !v.end_time,
-    warning: missingGoalDate
-      ? `Cột date trống — dùng ${date}${v.end_date ? " theo hạn hoàn thành" : "; có thể sửa trước khi nhập"}.`
-      : undefined,
+    warning:
+      missingGoalDate && !date
+        ? "Chưa chốt hạn; vẫn nhập mục tiêu bình thường."
+        : undefined,
   };
 }
 export function parseTable(
@@ -329,11 +339,13 @@ export function parseJson(
     }
     r.goal.tracking_mode = ["none", "progress"].includes(g.tracking_mode)
       ? "none"
-      : r.goal.checklist?.length
-        ? "checklist"
-        : g.metric_current !== undefined && g.metric_target !== undefined
-          ? "numeric"
-          : "none";
+      : g.tracking_mode === "numeric"
+        ? "numeric"
+        : measuredSteps(r.goal.checklist || []).length
+          ? "checklist"
+          : g.metric_current !== undefined && g.metric_target !== undefined
+            ? "numeric"
+            : "none";
     r.ref = g.id || "";
     rows.push(r);
   }
@@ -447,11 +459,12 @@ export function validateImportRow(
   if (r.issue.startsWith("Loại “")) return r.issue;
   if (!r.title.trim() || r.title.length > 160)
     return "Tên phải có 1–160 ký tự.";
-  if (!r.date)
+  const optionalDate = r.kind === "goal" || r.kind === "milestone";
+  if (!r.date && !optionalDate)
     return "Cột date trống — nhập ngày YYYY-MM-DD hoặc thứ trong tuần.";
-  if (!validDate(r.date))
+  if (r.date && !validDate(r.date))
     return `Ngày bắt đầu “${r.date}” không tồn tại; dùng YYYY-MM-DD.`;
-  if (!validDate(r.end_date))
+  if (r.end_date && !validDate(r.end_date))
     return `Ngày kết thúc “${r.end_date}” không tồn tại; dùng YYYY-MM-DD.`;
   if (r.end_date < r.date)
     return `Ngày kết thúc ${r.end_date} sớm hơn ngày bắt đầu ${r.date}.`;
@@ -470,6 +483,17 @@ export function validateImportRow(
     !r.goal_id
   )
     return "Mục tiêu gốc chưa được chọn nhập hoặc còn lỗi. Sửa mục tiêu trước, hoặc đổi liên kết.";
+  if (
+    ["session", "activity", "milestone"].includes(r.kind) &&
+    !r.goal_id &&
+    !r.goal_ref
+  )
+    return "Gắn một mục tiêu để biết thời gian này đang giúp bạn tiến tới điều gì.";
+  if (r.kind === "milestone")
+    return r.goal.timing_mode &&
+      !["fixed", "window", "flexible"].includes(r.goal.timing_mode)
+      ? "Chọn loại thời gian hợp lệ."
+      : "";
   if (r.kind === "timetable" && r.all_day)
     return (Date.parse(r.end_date) - Date.parse(r.date)) / 86400000 > 730
       ? "Lịch cả ngày tối đa 730 ngày."
@@ -613,7 +637,7 @@ export function goalPayload(r: ImportRow): GoalInput {
     starts_on: r.date === r.end_date ? null : r.date,
     timing_mode: x.timing_mode || (r.date === r.end_date ? "fixed" : "window"),
     reserved_hours: x.reserved_hours || 0,
-    deadline: r.end_date,
+    deadline: r.end_date || null,
     semester_index: x.semester_index ?? null,
     metric_current: x.metric_current ?? 0,
     metric_target: x.metric_target ?? 1,
@@ -624,6 +648,16 @@ export function goalPayload(r: ImportRow): GoalInput {
     completed_on: x.completed_on || null,
     milestone_kind: x.milestone_kind || "general",
   };
+  g.checklist = goalSteps(g).map((s) =>
+    s.is_final
+      ? {
+          ...s,
+          date: r.date || null,
+          end_date: r.end_date || null,
+          timing_mode: g.timing_mode,
+        }
+      : s,
+  );
   g.progress = calculatedProgress(g);
   return g;
 }
@@ -677,7 +711,7 @@ export function prepareImportRows(
         r.goal_ref = r.goal_id ? "" : incoming[0].ref;
       } else if (!uuid.test(link) && !r.goal_ref) {
         const created = row(
-          { title: link, kind: "goal", date: today },
+          { title: link, kind: "goal" },
           "goal",
           today,
           rows.length,
@@ -686,7 +720,7 @@ export function prepareImportRows(
         created.ref = `import:${created.key}`;
         created.generated = true;
         created.warning =
-          "Tạo từ tên liên kết; chưa đặt thước đo. Hạn đang dùng hôm nay, có thể sửa tại đây.";
+          "Tạo từ tên liên kết; chưa đặt thước đo và chưa chốt hạn.";
         rows.push(created);
         r.goal_id = "";
         r.goal_ref = created.ref;
@@ -740,7 +774,16 @@ export function importPayload(rows: ImportRow[]) {
         : {
             title: r.title.trim(),
             notes: r.notes,
-            date: r.date,
+            date: r.date || null,
+            ...(r.kind === "milestone"
+              ? {
+                  end_date: r.end_date || null,
+                  timing_mode:
+                    r.goal.timing_mode ||
+                    (r.date !== r.end_date ? "window" : "fixed"),
+                  done: r.status === "completed",
+                }
+              : {}),
             minutes:
               Number(r.minutes) ||
               (r.start_time && r.end_time
@@ -756,7 +799,7 @@ export function importPayload(rows: ImportRow[]) {
                   all_day: Boolean(r.all_day),
                   valid_from: r.date,
                   valid_until: r.end_date,
-                  semester_index: r.timetable?.semester_index || 0,
+                  semester_index: r.timetable?.semester_index ?? null,
                   schedule_kind: r.timetable?.kind || "class",
                 }
               : {}),

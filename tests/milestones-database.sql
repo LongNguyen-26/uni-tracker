@@ -1,0 +1,53 @@
+begin;
+select set_config('test.user',gen_random_uuid()::text,true);
+select set_config('test.other',gen_random_uuid()::text,true);
+insert into auth.users(id,email) values(current_setting('test.user')::uuid,'milestone-local@example.invalid'),(current_setting('test.other')::uuid,'restore-local@example.invalid');
+set local role authenticated;
+select set_config('request.jwt.claim.sub',current_setting('test.user'),true);
+do $$
+declare g uuid; n uuid; result jsonb; items jsonb; backup jsonb; before_count integer; s uuid;
+begin
+ insert into public.goals(user_id,title,deadline,tracking_mode,checklist) values(auth.uid(),'Checklist','2026-11-30','checklist','[{"id":"draft","title":"Draft","done":true},{"id":"review","title":"Review","done":false}]') returning id into g;
+ if (select progress from public.goals where id=g)<>50 or (select jsonb_array_length(checklist) from public.goals where id=g)<>3 then raise exception 'Legacy deadline changed denominator'; end if;
+ select count(*) into before_count from public.activities;
+ perform public.append_goal_milestone(g,'{"title":"Abstract","date":"2026-10-31","end_date":"2026-10-31"}');
+ if (select deadline from public.goals where id=g)<>'2026-11-30' then raise exception 'Abstract erased final deadline'; end if;
+ perform public.append_goal_milestone(g,'{"title":"Abstract","date":"2026-10-31","end_date":"2026-10-31"}');
+ if (select jsonb_array_length(checklist) from public.goals where id=g)<>4 then raise exception 'Duplicate milestone'; end if;
+ insert into public.goals(user_id,title,deadline,tracking_mode,metric_current,metric_target) values(auth.uid(),'IELTS',null,'numeric',6,7) returning id into n;
+ perform public.append_goal_milestone(n,'{"title":"Mock test","done":true}');
+ if not exists(select 1 from public.goals where id=n and progress=0 and deadline is null) then raise exception 'Numeric result or dateless goal changed'; end if;
+ result:=public.import_tracker_reviewed(gen_random_uuid(),'[{"kind":"milestone","row_key":"step","title":"Undated work","goal_ref":"new"},{"kind":"goal","row_key":"goal","title":"New","ref":"new","tracking_mode":"none"},{"kind":"activity","row_key":"bad","title":"Missing goal","date":"2026-09-07","minutes":30}]');
+ if (result->>'count')::int<>2 or jsonb_array_length(result->'errors')<>1 then raise exception 'Dependency/partial import failed: %',result; end if;
+ insert into public.focus_sessions(user_id,goal_id,title,scheduled_start,scheduled_end,planned_minutes,elapsed_seconds,status,segments) values(auth.uid(),g,'Precise','2026-09-07T01:00Z','2026-09-07T02:00Z',60,23,'paused','[{"start":"2026-09-07T01:00:00Z","end":"2026-09-07T01:00:23Z"}]') returning id into s;
+ insert into public.activities(user_id,goal_id,title,session_id,occurred_on,duration_minutes,started_at,ended_at) values(auth.uid(),g,'Precise',s,'2026-09-07',23.0/60,'2026-09-07T01:00Z','2026-09-07T01:00:23Z');
+ insert into public.weekly_budgets(user_id,goal_id,week_start,planned_minutes) values(auth.uid(),g,'2026-09-07',120);
+ insert into public.timetable_entries(user_id,title,kind,semester_index,weekday,start_minute,end_minute,valid_from,valid_until,goal_id) values(auth.uid(),'Outside term','fixed',null,0,420,480,'2030-01-01','2030-01-31',g);
+ backup:=public.export_tracker();
+ select jsonb_agg(jsonb_build_object('key',t.tbl||':'||(v->>'id'),'table',t.tbl,'data',v,'resolution','keep')) into items from (values('goals','goals'),('focus_sessions','sessions'),('activities','activities'),('weekly_budgets','budgets'),('timetable_entries','timetable_entries')) t(tbl,key) cross join lateral jsonb_array_elements(backup->t.key) v;
+ perform set_config('test.restore_items',items::text,true);
+ perform set_config('test.original_goal',g::text,true);
+ perform set_config('test.backup',backup::text,true);
+ result:=public.restore_tracker_reviewed(items,false);
+ if exists(select 1 from jsonb_array_elements(result->'rows') r where r->>'status' not in ('same','conflict')) then raise exception 'Same-account preview failed: %',result; end if;
+end $$;
+select set_config('request.jwt.claim.sub',current_setting('test.other'),true);
+do $$
+declare items jsonb:=current_setting('test.restore_items')::jsonb; result jsonb; backup jsonb:=current_setting('test.backup')::jsonb; batch uuid:=gen_random_uuid(); restored_goal_id uuid;
+begin
+ result:=public.restore_tracker_reviewed(items,true,batch);
+ if exists(select 1 from jsonb_array_elements(result->'rows') r where r->>'status'='error') then raise exception 'Restore failed: %',result; end if;
+ if (select count(*) from public.goals)<>jsonb_array_length(backup->'goals') or (select count(*) from public.activities)<>jsonb_array_length(backup->'activities') then raise exception 'Records lost or phantom progress history'; end if;
+ if not exists(select 1 from public.activities a join public.focus_sessions s on a.session_id=s.id where a.duration_minutes=23.0/60 and s.elapsed_seconds=23 and s.status='paused' and s.goal_id=a.goal_id) then raise exception 'Seconds or links lost'; end if;
+ result:=public.restore_tracker_reviewed(items,true,batch);
+ result:=public.restore_tracker_reviewed(items,true,gen_random_uuid());
+ if (select count(*) from public.activities)<>jsonb_array_length(backup->'activities') then raise exception 'Retry duplicated records'; end if;
+ restored_goal_id:=public.restore_record_id('goals',current_setting('test.original_goal')::uuid);
+ update public.goals set title='Keep edited title' where id=restored_goal_id;
+ result:=public.restore_tracker_reviewed(items,false);
+ if not exists(select 1 from jsonb_array_elements(result->'rows') r where r->>'status'='conflict') then raise exception 'Missing conflict review'; end if;
+ if not exists(select 1 from public.goals where id=id and title='Keep edited title') then raise exception 'Preview changed data'; end if;
+ if exists(select 1 from public.goals where user_id<>auth.uid()) then raise exception 'Owner isolation failed'; end if;
+end $$;
+reset role;
+rollback;

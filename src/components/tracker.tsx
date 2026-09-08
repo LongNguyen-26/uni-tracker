@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import {
-  ArrowDownToLine,
   ArrowRight,
   BookOpen,
   CalendarDays,
@@ -66,6 +65,9 @@ import {
   timingMode,
   parseCalendarPreset,
 } from "@/lib/schedule";
+import SessionEditor from "./session-editor";
+import type { ImportContext } from "@/lib/importer";
+import { milestonesOnDay } from "@/lib/milestones";
 import ProductivityPanel from "./productivity";
 import {
   activityLabel,
@@ -78,7 +80,8 @@ import {
 type View = "timeline" | "goals" | "journal" | "planning";
 type Modal =
   | { kind: "auth" | "recovery" | "settings" | "prepare" }
-  | { kind: "import"; initialKind?: "timetable" }
+  | { kind: "import"; initialKind?: "timetable"; context?: ImportContext }
+  | { kind: "session"; date?: string }
   | { kind: "goal"; goal?: Goal; date?: string }
   | { kind: "activity"; activity?: Activity; date?: string }
   | { kind: "delete"; table: "goals" | "activities"; id: string; title: string }
@@ -121,6 +124,7 @@ function SemesterCard({
   ).length;
   const semesterGoals = goals.filter(
     (g) =>
+      !!g.deadline &&
       g.deadline >= semester.start &&
       (g.starts_on || g.deadline) <= semester.end,
   );
@@ -192,7 +196,7 @@ function SemesterCard({
                     )
                   : undefined;
                 const title = day
-                  ? `${formatDate(day, true)}${outside ? " · Ngoài học kỳ" : holiday ? ` · ${holiday.label}` : ""} · ${formatMinutes(summary?.minutes || 0)}${summary?.label ? ` · ${summary.label}` : ""}${visual?.plans.length ? ` · ${visual.plans.length} phiên dự định` : ""}${visual?.ranges.length ? ` · ${visual.ranges.map((g) => g.title).join(", ")}` : ""}`
+                  ? `${formatDate(day, true)}${outside ? " · Ngoài học kỳ" : holiday ? ` · ${holiday.label}` : ""} · ${formatMinutes(summary?.minutes || 0)}${summary?.label ? ` · ${summary.label}` : ""}${visual?.markers.length ? ` · ${visual.markers.map((m) => `${m.goal.title}: ${m.step.title}`).join(" · ")}` : ""}${visual?.plans.length ? ` · ${visual.plans.length} phiên dự định` : ""}${visual?.ranges.length ? ` · ${visual.ranges.map((g) => g.title).join(", ")}` : ""}`
                   : "";
                 return day ? (
                   <div
@@ -207,17 +211,30 @@ function SemesterCard({
                     <button
                       type="button"
                       className={`day-cell ${outside ? "outside-term" : ""} ${holiday ? "holiday" : ""} ${day === today ? "today" : ""} ${day === selectedDay ? "selected" : ""} ${visual?.planned ? "has-plan" : ""} ${summary?.marker ? "has-marker" : ""}`}
-                      style={{ background: visual?.background }}
+                      style={{
+                        background: visual?.background,
+                        boxShadow: visual?.finalMarkers
+                          .map(
+                            (m, n) =>
+                              `inset 0 0 0 ${2 + n * 2}px ${m.goal.color}`,
+                          )
+                          .join(", "),
+                      }}
                       title={title}
                       aria-label={title}
                       aria-pressed={day === selectedDay}
                       disabled={outside}
                       onClick={() => onDay(day)}
                     >
-                      {!!visual?.fixed.length && (
+                      {!!visual?.intermediate.length && (
                         <i
-                          className="deadline-corner"
-                          style={{ background: visual.corner }}
+                          className={`milestone-corner ${visual.intermediate.some((m) => m.step.done) ? "done" : ""}`}
+                          style={
+                            {
+                              "--milestone-color":
+                                visual.intermediate[0].goal.color,
+                            } as React.CSSProperties
+                          }
                         />
                       )}
                       <span aria-hidden="true">
@@ -289,7 +306,9 @@ function GoalCard({
   onDelete: () => void;
   busy: boolean;
 }) {
-  const remaining = daysBetween(today, goal.deadline);
+  const remaining = goal.deadline
+    ? daysBetween(today, goal.deadline)
+    : Infinity;
   const completed = goal.progress === 100;
   return (
     <article
@@ -422,7 +441,7 @@ export default function Tracker() {
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState("");
-  const [view, setView] = useState<View>("timeline");
+  const [view, setView] = useState<View>("planning");
   const [modal, setModal] = useState<Modal>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [zoom, setZoom] = useState("all");
@@ -643,9 +662,9 @@ export default function Tracker() {
   );
   const activeGoals = goals.filter((g) => g.progress < 100);
   const completedGoals = goals.filter((g) => g.progress === 100);
-  const deadlines = [...activeGoals].sort((a, b) =>
-    a.deadline.localeCompare(b.deadline),
-  );
+  const deadlines = activeGoals
+    .filter((g): g is Goal & { deadline: string } => !!g.deadline)
+    .sort((a, b) => a.deadline.localeCompare(b.deadline));
   const recent = [...activities].sort(
     (a, b) =>
       b.occurred_on.localeCompare(a.occurred_on) ||
@@ -821,44 +840,11 @@ export default function Tracker() {
     setBusy(true);
     try {
       const db = getSupabase()!;
-      const read = async (table: string) => {
-        const rows: unknown[] = [];
-        for (let from = 0; ; from += 1000) {
-          const r = await db
-            .from(table)
-            .select("*")
-            .eq("user_id", user.id)
-            .order("id")
-            .range(from, from + 999);
-          if (r.error) throw r.error;
-          rows.push(...r.data);
-          if (r.data.length < 1000) return rows;
-        }
-      };
-      const [sessions, budgets, timetable_entries] = await Promise.all([
-        read("focus_sessions"),
-        read("weekly_budgets"),
-        read("timetable_entries"),
-      ]);
-      const blob = new Blob(
-        [
-          JSON.stringify(
-            {
-              version: 2,
-              exported_at: new Date().toISOString(),
-              profile,
-              goals,
-              activities,
-              sessions,
-              budgets,
-              timetable_entries,
-            },
-            null,
-            2,
-          ),
-        ],
-        { type: "application/json" },
-      );
+      const result = await db.rpc("export_tracker");
+      if (result.error) throw result.error;
+      const blob = new Blob([JSON.stringify(result.data, null, 2)], {
+        type: "application/json",
+      });
       const url = URL.createObjectURL(blob),
         a = document.createElement("a");
       a.href = url;
@@ -900,11 +886,13 @@ export default function Tracker() {
         (statusFilter === "done"
           ? g.progress === 100
           : statusFilter === "overdue"
-            ? g.progress < 100 && g.deadline < today
+            ? g.progress < 100 && !!g.deadline && g.deadline < today
             : g.progress < 100)) &&
       (categoryFilter === "all" || g.category === categoryFilter) &&
       (!sem ||
-        (g.deadline >= sem.start && (g.starts_on || g.deadline) <= sem.end)) &&
+        (!!g.deadline &&
+          g.deadline >= sem.start &&
+          (g.starts_on || g.deadline) <= sem.end)) &&
       g.title.toLocaleLowerCase("vi").includes(query.toLocaleLowerCase("vi"))
     );
   });
@@ -924,6 +912,7 @@ export default function Tracker() {
   const dayGoals = selectedDay
     ? goals.filter(
         (g) =>
+          !!g.deadline &&
           g.deadline >= selectedDay &&
           (g.starts_on || g.deadline) <= selectedDay,
       )
@@ -988,16 +977,6 @@ export default function Tracker() {
             <Settings2 size={18} />
             Cài đặt hành trình
           </button>
-          {user && (
-            <button
-              className="nav-item"
-              onClick={() => void exportData()}
-              disabled={busy}
-            >
-              <ArrowDownToLine size={18} />
-              Xuất dữ liệu
-            </button>
-          )}
           <div className="account">
             <span className="avatar">
               {user
@@ -1163,29 +1142,37 @@ export default function Tracker() {
                     : "Lưu lại từng ngày bạn đã học hỏi, trải nghiệm và trưởng thành."}
               </p>
             </div>
-            <div className="heading-actions">
-              <button
-                className="button"
-                onClick={() => openWrite({ kind: "import" })}
-              >
-                <ArrowDownToLine size={17} />
-                Nhập dữ liệu
-              </button>
-              <button
-                className="button"
-                onClick={() => openWrite({ kind: "activity" })}
-              >
-                <Plus size={17} />
-                Ghi hoạt động
-              </button>
-              <button
-                className="button primary"
-                onClick={() => openWrite({ kind: "goal" })}
-              >
-                <Plus size={17} />
-                Thêm mục tiêu
-              </button>
-            </div>
+            {view !== "timeline" && (
+              <div className="heading-actions">
+                {view === "goals" ? (
+                  <>
+                    <button
+                      className="button"
+                      onClick={() =>
+                        openWrite({ kind: "import", context: "goals" })
+                      }
+                    >
+                      Nhập mục tiêu
+                    </button>
+                    <button
+                      className="button primary"
+                      onClick={() => openWrite({ kind: "goal" })}
+                    >
+                      <Plus size={17} />
+                      Thêm mục tiêu
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="button primary"
+                    onClick={() => openWrite({ kind: "session" })}
+                  >
+                    <Plus size={17} />
+                    Thêm phiên
+                  </button>
+                )}
+              </div>
+            )}
           </div>
           {loadError && (
             <div role="alert" className="error-banner">
@@ -1972,6 +1959,17 @@ export default function Tracker() {
           onSave={saveGoal}
         />
       )}
+      {modal?.kind === "session" && (
+        <SessionEditor
+          goals={goals}
+          userId={user?.id}
+          defaultDate={modal.date}
+          onClose={() => setModal(null)}
+          onSaved={async () => {
+            if (user) await loadData(user);
+          }}
+        />
+      )}
       {modal?.kind === "activity" && (
         <ActivityForm
           activity={modal.activity}
@@ -1984,6 +1982,7 @@ export default function Tracker() {
       {modal?.kind === "import" && profile && user && (
         <ImportDialog
           initialKind={modal.initialKind}
+          context={modal.context}
           goals={goals}
           activities={activities}
           profile={profile}
@@ -2001,6 +2000,10 @@ export default function Tracker() {
           profile={profile}
           onSave={saveProfile}
           onImport={() => setModal({ kind: "import" })}
+          onConfirmed={() => {
+            setModal(null);
+            setView("planning");
+          }}
           onSkip={() => {
             void saveProfile({ ...profile, preparation_done: true })
               .then(() => {
@@ -2016,6 +2019,8 @@ export default function Tracker() {
           profile={preset ? { ...profile, ...preset } : profile}
           onClose={() => setModal(null)}
           onSave={saveProfile}
+          onExport={() => void exportData()}
+          onRestore={() => setModal({ kind: "import", context: "restore" })}
         />
       )}
       {modal?.kind === "delete" && (
@@ -2082,6 +2087,17 @@ export default function Tracker() {
                 ))}
               </section>
             )}
+            {milestonesOnDay(goals, selectedDay)
+              .filter((m) => !m.step.is_final)
+              .map((m) => (
+                <div className="day-goal" key={m.goal.id + m.step.id}>
+                  <span style={{ color: m.goal.color }}>
+                    {m.step.done ? "▲" : "△"}
+                  </span>{" "}
+                  <strong>{m.step.title}</strong> · {m.goal.title}
+                  <p>{m.step.notes}</p>
+                </div>
+              ))}
             {dayGoals.length > 0 && (
               <>
                 <h3>
@@ -2169,23 +2185,14 @@ export default function Tracker() {
                 </div>
               )}
             <div className="form-actions">
-              {selectedDay <= today && (
-                <button
-                  className="button"
-                  onClick={() =>
-                    openWrite({ kind: "activity", date: selectedDay })
-                  }
-                >
-                  <Plus size={16} />
-                  Ghi hoạt động
-                </button>
-              )}
               <button
                 className="button primary"
-                onClick={() => openWrite({ kind: "goal", date: selectedDay })}
+                onClick={() =>
+                  openWrite({ kind: "session", date: selectedDay })
+                }
               >
                 <Plus size={16} />
-                Thêm mục tiêu
+                Thêm phiên
               </button>
             </div>
           </div>

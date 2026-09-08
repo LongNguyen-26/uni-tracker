@@ -24,6 +24,7 @@ import {
   validateImportRow,
   type ImportRow,
   type ImportKind,
+  type ImportContext,
 } from "@/lib/importer";
 import { monday, localDateTime } from "@/lib/planning";
 import {
@@ -34,12 +35,20 @@ import {
 import ImportHelp from "./import-help";
 import { importTemplate } from "@/lib/import-guide";
 import { ImportReviewRow, importChoices } from "./import-review";
+import {
+  isBackup,
+  backupRows,
+  type RestoreItem,
+  type RestoreReview,
+} from "@/lib/backup";
+import RestoreReviewPanel from "./restore-review";
 import type { FileText } from "@/lib/import-files";
 
 const timetableSample =
   "Tên môn học,Thứ,Giờ bắt đầu,Giờ kết thúc,Loại\nCấu trúc dữ liệu,T2,08:00,10:00,class\nThể thao,T4,17:00,18:00,fixed";
 export default function ImportDialog({
   initialKind = "session",
+  context = "schedule",
   goals,
   activities,
   profile,
@@ -47,6 +56,7 @@ export default function ImportDialog({
   onImported,
 }: {
   initialKind?: "session" | "timetable";
+  context?: ImportContext;
   goals: Goal[];
   activities: Activity[];
   profile: Profile;
@@ -59,7 +69,9 @@ export default function ImportDialog({
     ) || journeySemesters(profile)[0];
   const [text, setText] = useState(""),
     [format, setFormat] = useState<FileText["format"]>("table"),
-    [kind, setKind] = useState<ImportKind>(initialKind),
+    [kind, setKind] = useState<ImportKind>(
+      context === "goals" ? "goal" : initialKind,
+    ),
     [anchor, setAnchor] = useState(
       initialKind === "timetable" ? initialTerm.start : monday(todayKey()),
     ),
@@ -87,8 +99,12 @@ export default function ImportDialog({
     [checked, setChecked] = useState(false),
     [sheets, setSheets] = useState<FileText["sheets"]>([]),
     [batch, setBatch] = useState("");
+  const [restore, setRestore] = useState<{
+    items: RestoreItem[];
+    review: RestoreReview[];
+  } | null>(null);
   const formRef = useRef<HTMLFieldSetElement>(null);
-  const sample = importTemplate(todayKey(), initialTerm.end);
+  const sample = importTemplate(todayKey(), initialTerm.end, context);
   const scrollTop = () =>
     requestAnimationFrame(() =>
       formRef.current?.closest('[role="dialog"]')?.scrollTo({ top: 0 }),
@@ -98,12 +114,17 @@ export default function ImportDialog({
   const valid = validImportRows(rows, goals, todayKey());
   const invalid = rows.filter((r, i) => r.selected && issues[i]);
   const [result, setResult] = useState("");
-  const [opened, setOpened] = useState<string[]>([]);
+  const [opened, setOpened] = useState<string[]>(
+    context === "goals" ? ["goal"] : ["timetable", "session"],
+  );
   const groups = [
     {
       key: "goal",
       title: "Mục tiêu",
-      items: rows.filter((r) => r.kind === "goal" || r.kind === "budget"),
+      items: rows.filter(
+        (r) =>
+          r.kind === "goal" || r.kind === "budget" || r.kind === "milestone",
+      ),
     },
     {
       key: "timetable",
@@ -123,7 +144,10 @@ export default function ImportDialog({
   ].filter((g) => g.items.length);
   function jump(row: ImportRow) {
     setOpened((prev) => [
-      ...new Set([...prev, row.kind === "budget" ? "goal" : row.kind]),
+      ...new Set([
+        ...prev,
+        ["budget", "milestone"].includes(row.kind) ? "goal" : row.kind,
+      ]),
     ]);
     window.setTimeout(() => {
       const element = document.getElementById("import-" + row.key);
@@ -138,6 +162,20 @@ export default function ImportDialog({
     try {
       if (text.length > 10 * 1024 * 1024)
         throw new Error("Nội dung tối đa 10 MB.");
+      if (format === "json") {
+        const data = JSON.parse(text);
+        if (isBackup(data)) {
+          const items = backupRows(data);
+          const r = await getSupabase()!.rpc("restore_tracker_reviewed", {
+            p_items: items,
+            p_apply: false,
+          });
+          if (r.error) throw r.error;
+          setRestore({ items, review: r.data.rows });
+          scrollTop();
+          return;
+        }
+      }
       const base =
         format === "json"
           ? parseJson(text, kind, anchor)
@@ -162,7 +200,9 @@ export default function ImportDialog({
           r.timetable = {
             kind: r.timetable?.kind || "class",
             semester_index:
-              format === "json" ? (r.timetable?.semester_index ?? term) : term,
+              journeySemesters(profile).find(
+                (t) => r.date >= t.start && r.date <= t.end,
+              )?.index ?? null,
           };
         }
       });
@@ -348,7 +388,13 @@ export default function ImportDialog({
   }
   return (
     <Dialog
-      title="Nhập lịch & kế hoạch"
+      title={
+        context === "goals"
+          ? "Nhập mục tiêu"
+          : context === "restore"
+            ? "Nhập lại toàn bộ"
+            : "Nhập lịch"
+      }
       description="1. Đọc dữ liệu → 2. Đối chiếu → 3. Xác nhận nhập"
       onClose={() => {
         if (!busy) onClose();
@@ -370,9 +416,28 @@ export default function ImportDialog({
             )}
           </div>
         )}
-        {!rows.length && !result ? (
+        {restore ? (
+          <RestoreReviewPanel
+            items={restore.items}
+            review={restore.review}
+            onBack={() => setRestore(null)}
+            onSaved={onImported}
+          />
+        ) : !rows.length && !result ? (
           <>
-            <ImportHelp day={todayKey()} termEnd={initialTerm.end} />
+            {context === "restore" ? (
+              <p>
+                Chọn bản sao lưu JSON từ Xuất dữ liệu. App đối chiếu toàn bộ mục
+                tiêu, cột mốc, phiên, nhật ký, quỹ giờ và lịch cố định trước khi
+                bổ sung.
+              </p>
+            ) : (
+              <ImportHelp
+                context={context}
+                day={todayKey()}
+                termEnd={initialTerm.end}
+              />
+            )}
             <label>
               Chọn file
               <input
@@ -465,7 +530,7 @@ export default function ImportDialog({
                 </select>
               </label>
             </div>
-            {kind === "timetable" && (
+            {false && (
               <label>
                 TKB của học kỳ
                 <select
@@ -593,8 +658,18 @@ export default function ImportDialog({
               </button>
             </div>
             <p className="muted small">
-              Mục tiêu được tạo trước rồi gắn vào lịch và hoạt động theo tên.
-              Chỉ các dòng hợp lệ, đang chọn sẽ được nhập.
+              Mục tiêu được tạo trước, tiếp theo là việc/cột mốc rồi lịch và
+              hoạt động. Chỉ các dòng hợp lệ, đang chọn sẽ được nhập.
+            </p>
+            <p className="muted small">
+              {
+                rows.filter((r) =>
+                  context === "goals"
+                    ? !["goal", "milestone", "budget"].includes(r.kind)
+                    : ["goal", "milestone"].includes(r.kind),
+                ).length
+              }{" "}
+              dòng thuộc nhóm khác cũng được giữ để bạn đối chiếu.
             </p>
             {invalid.length > 0 && (
               <div className="import-warning" role="alert">
@@ -670,6 +745,39 @@ export default function ImportDialog({
                               issue={issues[rows.indexOf(r)]}
                               rows={rows}
                               goals={goals}
+                              onCreateGoal={(index) => {
+                                const key = crypto.randomUUID();
+                                const ref = "import:" + key;
+                                const created: ImportRow = {
+                                  key,
+                                  ref,
+                                  kind: "goal",
+                                  title: "",
+                                  date: "",
+                                  end_date: "",
+                                  start_time: "",
+                                  end_time: "",
+                                  minutes: "",
+                                  goal_id: "",
+                                  goal_ref: "",
+                                  notes: "",
+                                  goal: { tracking_mode: "none" },
+                                  selected: true,
+                                  issue: "",
+                                };
+                                setRows((prev) => [
+                                  created,
+                                  ...prev.map((r, i) =>
+                                    i === index
+                                      ? { ...r, goal_id: "", goal_ref: ref }
+                                      : r,
+                                  ),
+                                ]);
+                                setOpened((prev) => [
+                                  ...new Set([...prev, "goal"]),
+                                ]);
+                                setChecked(false);
+                              }}
                               patch={patch}
                             />
                           ))}

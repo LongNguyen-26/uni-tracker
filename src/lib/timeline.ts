@@ -29,7 +29,7 @@ export type Goal = {
   metric_direction: "increase" | "decrease";
   checklist: GoalStep[];
   milestone_kind: MilestoneKind;
-  deadline: string;
+  deadline: string | null;
   progress: number;
   completed_on: string | null;
   created_at: string;
@@ -88,7 +88,17 @@ export type ActivityInput = Pick<
   | "started_at"
   | "ended_at"
 >;
-export type GoalStep = { id: string; title: string; done: boolean };
+export type GoalStep = {
+  id: string;
+  title: string;
+  done: boolean;
+  date?: string | null;
+  end_date?: string | null;
+  timing_mode?: "fixed" | "window" | "flexible";
+  notes?: string;
+  is_final?: boolean;
+  counts_for_progress?: boolean;
+};
 export type Holiday = { label: string; start: string; end: string };
 export type SemesterSettings = {
   index: number;

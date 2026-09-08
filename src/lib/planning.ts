@@ -8,6 +8,7 @@ import {
   type Profile,
   type SemesterSettings,
 } from "./timeline";
+import { measuredSteps } from "./milestones";
 export type WeeklyBudget = {
   id: string;
   user_id: string;
@@ -49,7 +50,7 @@ export const goalProgressText = (goal: Goal) =>
     : goal.tracking_mode === "numeric"
       ? `${goal.metric_current} → ${goal.metric_target}${goal.metric_unit ? ` ${goal.metric_unit}` : ""}`
       : goal.tracking_mode === "checklist"
-        ? `${goal.checklist.filter((s) => s.done).length}/${goal.checklist.length} cột mốc`
+        ? `${measuredSteps(goal.checklist).filter((s) => s.done).length}/${measuredSteps(goal.checklist).length} cột mốc`
         : goal.tracking_mode === "milestone"
           ? goal.progress === 100
             ? "Đã đạt"
@@ -76,17 +77,17 @@ export function calculatedProgress(
       ? 100
       : 0;
   if (goal.tracking_mode === "checklist")
-    return goal.checklist.length
+    return measuredSteps(goal.checklist).length
       ? Math.floor(
-          (goal.checklist.filter((s) => s.done).length /
-            goal.checklist.length) *
+          (measuredSteps(goal.checklist).filter((s) => s.done).length /
+            measuredSteps(goal.checklist).length) *
             100,
         )
       : 0;
   return goal.progress;
 }
 export const goalDateText = (g: Goal) =>
-  g.starts_on && g.starts_on !== g.deadline
+  !g.deadline ? "Chưa chốt hạn" : g.starts_on && g.starts_on !== g.deadline
     ? `${formatDate(g.starts_on)} – ${formatDate(g.deadline, true)}`
     : formatDate(g.deadline, true);
 export function validDate(value: string) {

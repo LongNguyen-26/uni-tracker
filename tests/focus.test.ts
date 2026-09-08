@@ -63,7 +63,7 @@ test("periods use calendar weeks/months including leap years and year boundary",
   );
 });
 test("two deadlines split diagonally; logging same goal does not add another segment", () => {
-  const deadline = goals[0].deadline;
+  const deadline = goals[0].deadline!;
   const pair = [goals[0], { ...goals[5], deadline }];
   const days = summarizeDays(pair, [event({ occurred_on: deadline })]);
   const day = days.get(deadline)!;

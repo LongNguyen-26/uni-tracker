@@ -5,6 +5,7 @@ import { type ImportRow } from "@/lib/importer";
 
 export const importChoices = {
   goal: "Mục tiêu",
+  milestone: "Việc / cột mốc",
   timetable: "Lịch cố định",
   session: "Hoạt động",
 };
@@ -15,12 +16,14 @@ export function ImportReviewRow({
   rows,
   goals,
   patch,
+  onCreateGoal,
 }: {
   row: ImportRow;
   index: number;
   issue: string;
   rows: ImportRow[];
   goals: Goal[];
+  onCreateGoal?: (index: number) => void;
   patch: (index: number, data: Partial<ImportRow>) => void;
 }) {
   const [range, setRange] = useState(r.date !== r.end_date);
@@ -55,6 +58,15 @@ export function ImportReviewRow({
         />
       </td>
       <td>
+        {r.kind === "milestone" && (
+          <small className="muted">
+            ↳{" "}
+            {goals.find((g) => g.id === r.goal_id)?.title ||
+              rows.find((g) => g.kind === "goal" && g.ref === r.goal_ref)
+                ?.title ||
+              "Chọn mục tiêu"}
+          </small>
+        )}
         {r.kind === "budget" ? (
           <strong>Quỹ giờ trên mục tiêu</strong>
         ) : (
@@ -90,13 +102,20 @@ export function ImportReviewRow({
           value={r.title}
           onChange={(e) => change({ title: e.target.value })}
         />
-        {activity && (
+        {(activity || r.kind === "milestone") && (
           <select
             aria-label={`Trạng thái dòng ${i + 1}`}
-            value={r.kind === "activity" ? "completed" : "planned"}
+            value={
+              r.status || (r.kind === "activity" ? "completed" : "planned")
+            }
             onChange={(e) =>
               change({
-                kind: e.target.value === "completed" ? "activity" : "session",
+                kind:
+                  r.kind === "milestone"
+                    ? "milestone"
+                    : e.target.value === "completed"
+                      ? "activity"
+                      : "session",
                 status: e.target.value as "planned" | "completed",
                 source_error: undefined,
               })
@@ -231,25 +250,6 @@ export function ImportReviewRow({
               </label>
             </>
           )}
-          {r.kind === "timetable" && (
-            <label>
-              Loại lịch
-              <select
-                value={r.timetable?.kind || "fixed"}
-                onChange={(e) =>
-                  change({
-                    timetable: {
-                      kind: e.target.value as "class" | "fixed",
-                      semester_index: r.timetable?.semester_index || 0,
-                    },
-                  })
-                }
-              >
-                <option value="class">Lớp học</option>
-                <option value="fixed">Việc cố định</option>
-              </select>
-            </label>
-          )}
           <label>
             Ghi chú
             <textarea
@@ -314,7 +314,8 @@ export function ImportReviewRow({
             className="text-button small"
             onClick={() => {
               setRange(true);
-              if (r.kind === "goal") goalChange({ timing_mode: "window" });
+              if (["goal", "milestone"].includes(r.kind))
+                goalChange({ timing_mode: "window" });
             }}
           >
             Kéo dài nhiều ngày
@@ -323,7 +324,7 @@ export function ImportReviewRow({
         {r.kind === "timetable" && !r.all_day && range && (
           <small className="muted">Lặp theo thứ này đến ngày kết thúc</small>
         )}
-        {r.kind === "goal" && range && (
+        {["goal", "milestone"].includes(r.kind) && range && (
           <label>
             Khoảng ngày
             <select
@@ -407,6 +408,15 @@ export function ImportReviewRow({
         )}
       </td>
       <td>
+        {r.kind !== "goal" && !r.goal_id && !r.goal_ref && (
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => onCreateGoal?.(i)}
+          >
+            + Tạo mục tiêu
+          </button>
+        )}
         {r.kind !== "goal" && (
           <select
             aria-label={`Mục tiêu dòng ${i + 1}`}
