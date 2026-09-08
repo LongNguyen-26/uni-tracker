@@ -27,6 +27,15 @@ Production: https://uni-tracker-sigma.vercel.app · GitHub: https://github.com/L
 | `c892f48` (2026-09-08; pushed to `codex/guided-import`, then fast-forwarded to `main`) | Guided preparation and AI prompt/template; optional numeric/checklist measures; dependency-aware grouped partial imports; all-day windows, duration-only intentions and goal weekly hours. Goal dates mark the deadline/event window, including short approximate windows. | Preview READY — `dpl_41VHhTv8QdvbMaqi2CjxnKn8rs1G`; Production READY — `dpl_9UQ15RcJnPeSk3AGge1zLn7RBHx8`; production alias verified, HTTP 200. |
 | `docs: record deployment c892f48` (2026-09-08; documentation-only push) | Records both verified deployments, validation and QA cleanup. | No application changes; AGENTS-only delivery record retains production `c892f48`. |
 
+### Release 1 — unified milestones and forms — 2026-09-08
+
+- Commit `1456b07ffe8bf0f5e18c089ce8028f28ec40a3b8` pushed to `codex/unified-milestones`, then fast-forwarded to `main`. Preview READY: `dpl_EAMb5RXERznbjTHFHiwm98rC5JhZ`. Production READY: `dpl_A4opt9PvsdvNki2ztSmyeMLuTbXJ`, production alias assigned without errors; HTTP 200 verified.
+- Unified dated/undated work and final deadlines in `GoalStep`, preserving legacy checklist progress. Added contextual imports, milestone rows, shared session forms, multiple weekdays, and reviewed additive backup restore with all record types, exact seconds and links.
+- Applied migration `20260908142625_unified_goal_milestones_and_restore.sql` under the user's explicit database authorization, after rebuilding a fresh local database and passing all six SQL suites. All 48 unit tests, lint, typecheck and production build passed. Build required network access for the existing Google Font.
+- One Preview smoke flow confirmed the current term, opened goal import, and saved six out-of-order goal/milestone rows. Database verification retained the final deadline, a null deadline, and numeric IELTS progress at zero despite a completed intermediate milestone. Browser console had no errors or warnings. Removed the disposable QA account and local credentials after logout.
+- Security advisor remains limited to the existing disabled leaked-password protection setting. The documentation-only `docs: record deployment 1456b07` push records this release and retains the verified application deployment.
+- The approved next releases are the hourly weekly grid with automatically saved timer sessions, followed by the compact journey filters and estimated-date confirmation reminders. Holidays and drag-and-drop remain outside this plan.
+
 ### Release validation `c892f48` — 2026-09-08
 
 - User explicitly authorized production database changes after the initial automatic approval rejection. Applied additive migration `20260908041254_guided_import_and_goal_measures.sql`; existing records were retained.
