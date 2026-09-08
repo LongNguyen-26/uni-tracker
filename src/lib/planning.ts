@@ -22,6 +22,8 @@ export type FocusSession = {
   goal_id: string | null;
   title: string;
   notes: string;
+  intent?: string;
+  actual?: string;
   scheduled_start: string;
   scheduled_end: string;
   is_unscheduled?: boolean;
@@ -43,6 +45,7 @@ export type SessionInput = Pick<
   | "planned_minutes"
   | "timezone"
   | "is_unscheduled"
+  | "intent"
 >;
 export const goalProgressText = (goal: Goal) =>
   goal.tracking_mode === "none"
@@ -87,9 +90,11 @@ export function calculatedProgress(
   return goal.progress;
 }
 export const goalDateText = (g: Goal) =>
-  !g.deadline ? "Chưa chốt hạn" : g.starts_on && g.starts_on !== g.deadline
-    ? `${formatDate(g.starts_on)} – ${formatDate(g.deadline, true)}`
-    : formatDate(g.deadline, true);
+  !g.deadline
+    ? "Chưa chốt hạn"
+    : g.starts_on && g.starts_on !== g.deadline
+      ? `${formatDate(g.starts_on)} – ${formatDate(g.deadline, true)}`
+      : formatDate(g.deadline, true);
 export function validDate(value: string) {
   return (
     /^\d{4}-\d{2}-\d{2}$/.test(value) && dateKey(parseDate(value)) === value

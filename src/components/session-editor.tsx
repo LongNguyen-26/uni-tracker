@@ -72,7 +72,13 @@ export default function SessionEditor({
     : defaultTime || "09:00";
   const initialEnd = originalEnd
     ? localDateTime(originalEnd).slice(11, 16)
-    : "10:00";
+    : defaultTime
+      ? localDateTime(
+          new Date(
+            new Date(`${initialDay}T${defaultTime}`).getTime() + 3600000,
+          ).toISOString(),
+        ).slice(11, 16)
+      : "10:00";
   const [start, setStart] = useState(initialStart),
     [end, setEnd] = useState(initialEnd);
   const initialMinutes = Math.ceil(
@@ -101,17 +107,24 @@ export default function SessionEditor({
       const timesUnchanged =
         old &&
         timed === initialTimed &&
-        day === initialDay &&
         start === initialStart &&
         end === initialEnd;
+      const moveOriginal = (value: string) => {
+        const date = new Date(value);
+        const days = Math.round(
+          (Date.parse(day) - Date.parse(initialDay)) / 86400000,
+        );
+        date.setDate(date.getDate() + days);
+        return date.toISOString();
+      };
       const started_at = timed
         ? timesUnchanged && originalStart
-          ? originalStart
+          ? moveOriginal(originalStart)
           : new Date(`${day}T${start}`).toISOString()
         : null;
       const ended_at = timed
         ? timesUnchanged && originalEnd
-          ? originalEnd
+          ? moveOriginal(originalEnd)
           : new Date(`${endDay}T${end}`).toISOString()
         : null;
       const span =
@@ -193,6 +206,7 @@ export default function SessionEditor({
         const at = started_at || new Date(`${day}T00:00`).toISOString();
         const input: SessionInput = {
           title,
+          intent: content,
           goal_id: goalId || null,
           notes: session?.notes || "",
           is_unscheduled: !timed,
@@ -277,7 +291,9 @@ export default function SessionEditor({
             <input
               name="content"
               maxLength={160}
-              defaultValue={activity?.title || session?.title || ""}
+              defaultValue={
+                activity?.title || (session?.intent ?? session?.title) || ""
+              }
               placeholder="Chưa chọn nội dung"
             />
           </label>

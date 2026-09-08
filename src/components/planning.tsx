@@ -1,23 +1,17 @@
 "use client";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
-  Clock3,
   Pause,
   Play,
   Plus,
   Square,
-  Trash2,
   Maximize2,
   Upload,
 } from "lucide-react";
+import SessionRecap from "./session-recap";
+import { ActivityForm } from "./forms";
 import Dialog from "./dialog";
 import DatePicker from "./date-picker";
 import SessionEditor from "./session-editor";
@@ -98,6 +92,17 @@ export default function PlanningHub({
   const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
   const [week, setWeek] = useState(monday(todayKey()));
   const [edit, setEdit] = useState<FocusSession | "new" | null>(null);
+  const [detail, setDetail] = useState<string | null>(null),
+    [activityEdit, setActivityEdit] = useState<Activity | undefined>();
+  const [activityDetail, setActivityDetail] = useState<Activity | undefined>();
+  const [preset, setPreset] = useState<{ day: string; time: string } | null>(
+    null,
+  );
+  const [recap, setRecap] = useState<FocusSession | null>(null),
+    [recapEnabled, setRecapEnabled] = useState(true),
+    [dailyContent, setDailyContent] = useState(false);
+  const [pendingStops, setPendingStops] = useState<Record<string, string>>({});
+  const closeRecap = useCallback(() => setRecap(null), []);
   const [timer, setTimer] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -111,6 +116,17 @@ export default function PlanningHub({
         readAll<TimetableEntry>("timetable_entries", userId),
       ]);
       setSessions(s);
+      const pending: Record<string, string> = {};
+      for (const session of s) {
+        const at = localStorage.getItem(
+          "unitracker:stop:" + userId + ":" + session.id,
+        );
+        if (at && session.status !== "completed") pending[session.id] = at;
+      }
+      setPendingStops(pending);
+      setRecapEnabled(
+        localStorage.getItem("unitracker:recap:" + userId) !== "off",
+      );
       setBudgets(b);
       setTimetable(t);
       setError("");
@@ -132,16 +148,46 @@ export default function PlanningHub({
     setBusy(true);
     setError("");
     try {
-      const r = await getSupabase()!.rpc("transition_session", {
-        p_id: id,
-        p_action: action,
-        p_notes: notes ?? null,
-      });
+      const finishing = action === "stop" || action === "confirm";
+      const key = "unitracker:stop:" + userId + ":" + id;
+      let stopAt = localStorage.getItem(key);
+      if (stopAt && !finishing)
+        throw new Error(
+          "Phiên đang chờ ghi. Hãy thử lưu lại trước khi tiếp tục.",
+        );
+      if (finishing) {
+        stopAt ||= new Date().toISOString();
+        localStorage.setItem(key, stopAt);
+        setPendingStops((prev) => ({ ...prev, [id]: stopAt! }));
+      }
+      const r = finishing
+        ? await getSupabase()!.rpc("finish_session", {
+            p_id: id,
+            p_stopped_at: stopAt,
+            p_actual: notes ?? null,
+          })
+        : await getSupabase()!.rpc("transition_session", {
+            p_id: id,
+            p_action: action,
+            p_notes: null,
+          });
       if (r.error) throw r.error;
       setSessions((prev) =>
         prev.map((s) => (s.id === id ? (r.data as FocusSession) : s)),
       );
-      if (action === "confirm") {
+      if (finishing) {
+        localStorage.removeItem(key);
+        setPendingStops((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        setNotice(
+          r.data.elapsed_seconds > 0
+            ? `Đã ghi ${formatMinutes(r.data.elapsed_seconds / 60)}.`
+            : "Phiên kết thúc, chưa có thời gian thực làm.",
+        );
+        if (recapEnabled && r.data.elapsed_seconds > 0) setRecap(r.data);
         setTimer(null);
         onCloseRequested();
         await onChanged();
@@ -164,41 +210,29 @@ export default function PlanningHub({
       isWork(a) && a.occurred_on >= week && a.occurred_on <= addDays(week, 6),
   );
   const actual = work.reduce((n, a) => n + Number(a.duration_minutes), 0),
-    planned = budgets
-      .filter((b) => b.week_start === week)
-      .reduce((n, b) => n + b.planned_minutes, 0);
-  async function saveBudgets(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!userId) {
-      onAuth();
-      return;
-    }
-    const f = new FormData(e.currentTarget);
-    setBusy(true);
-    setError("");
-    try {
-      const rows = goals.map((g) => ({
-        user_id: userId,
-        goal_id: g.id,
-        week_start: week,
-        planned_minutes: Math.round(Number(f.get(g.id) || 0) * 60),
-      }));
-      if (rows.reduce((n, r) => n + r.planned_minutes, 0) > 10080)
-        throw new Error("Tổng phân bổ không thể vượt 168 giờ trong một tuần.");
-      if (rows.length) {
-        const r = await getSupabase()!
-          .from("weekly_budgets")
-          .upsert(rows, { onConflict: "user_id,week_start,goal_id" });
-        if (r.error) throw r.error;
-      }
-      await reload();
-      setNotice("Đã lưu phân bổ tuần.");
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
+    planned = weekly
+      .filter((s) => s.status !== "completed")
+      .reduce((n, s) => n + s.planned_minutes, 0);
+  async function saveContent(id: string, intent?: string, actual?: string) {
+    const r = await getSupabase()!.rpc("set_session_content", {
+      p_id: id,
+      p_intent: intent ?? null,
+      p_actual: actual ?? null,
+    });
+    if (r.error) throw r.error;
+    setSessions((prev) => prev.map((s) => (s.id === id ? r.data : s)));
+    await onChanged();
   }
+  const detailSession = sessions.find((s) => s.id === detail);
+  const missingContent = sessions.filter(
+    (s) =>
+      s.status === "completed" &&
+      s.elapsed_seconds > 0 &&
+      !s.actual &&
+      activities.some(
+        (a) => a.session_id === s.id && a.occurred_on === todayKey(),
+      ),
+  );
   return (
     <>
       {userId && !selected && (
@@ -242,6 +276,16 @@ export default function PlanningHub({
               </button>
             );
           })()}
+        </div>
+      )}
+      {!selected && Object.keys(pendingStops).length > 0 && (
+        <div className="form-error" role="alert">
+          Thời gian đã dừng trên thiết bị, đang chờ máy chủ ghi.{" "}
+          {Object.keys(pendingStops).map((id) => (
+            <button key={id} className="button" onClick={() => setTimer(id)}>
+              Mở để thử ghi lại
+            </button>
+          ))}
         </div>
       )}
       {visible && (
@@ -337,7 +381,7 @@ export default function PlanningHub({
               <strong>{formatMinutes(actual)}</strong>
             </div>
             <div>
-              <span>Ý định trong tuần</span>
+              <span>Phiên dự định trong tuần</span>
               <strong>{formatMinutes(planned)}</strong>
             </div>
             <div>
@@ -359,183 +403,295 @@ export default function PlanningHub({
             onImport={() => onImport("timetable")}
             onAuth={onAuth}
             onChanged={reload}
-            onSession={setTimer}
+            activities={activities}
+            onSession={setDetail}
+            onActivity={(id) =>
+              setActivityDetail(activities.find((a) => a.id === id))
+            }
+            onCreate={(day, time) => {
+              if (!userId) {
+                onAuth();
+                return;
+              }
+              setPreset({ day, time });
+              setEdit("new");
+            }}
+            onIntent={(id, intent) => saveContent(id, intent)}
           />
-          <div className="planning-columns">
-            <section className="planning-card">
-              <h2>Quỹ giờ theo mục tiêu</h2>
-              <p className="muted small">
-                Con số để định hướng tuần này. Chỉ phiên đã xác nhận và nhật ký
-                thực tế được cộng vào kết quả.
-              </p>
-              <form
-                className="form"
-                key={`${week}-${JSON.stringify(budgets)}`}
-                onSubmit={saveBudgets}
-              >
-                {goals.map((g) => {
-                  const p =
-                      budgets.find(
-                        (b) => b.week_start === week && b.goal_id === g.id,
-                      )?.planned_minutes ?? (g.weekly_hours || 0) * 60,
-                    a = work
-                      .filter((x) => x.goal_id === g.id)
-                      .reduce((n, x) => n + Number(x.duration_minutes), 0);
-                  return (
-                    <div className="budget-row" key={g.id}>
-                      <div className="section-row">
-                        <label htmlFor={`budget-${g.id}`}>
-                          <span
-                            className="color-dot"
-                            style={{ background: g.color }}
-                          />
-                          {g.title}
-                        </label>
-                        <div className="hours-input">
-                          <input
-                            id={`budget-${g.id}`}
-                            name={g.id}
-                            aria-label={`Giờ dự kiến cho ${g.title}`}
-                            type="number"
-                            min={0}
-                            max={168}
-                            step="any"
-                            defaultValue={p / 60}
-                          />
-                          giờ
-                        </div>
-                      </div>
-                      <div className="progress-track">
-                        <span
-                          style={{
-                            background: g.color,
-                            width: `${p ? Math.min(100, (a / p) * 100) : 0}%`,
-                          }}
-                        />
-                      </div>
-                      <small>
-                        Thực tế {formatMinutes(a)} / định {formatMinutes(p)}
-                        {p > 0
-                          ? ` · ${a < p ? `còn ${formatMinutes(p - a)}` : `vượt ${formatMinutes(a - p)}`}`
-                          : ""}
-                      </small>
-                    </div>
+          <section className="planning-card weekly-budget-readonly">
+            <h2>Quỹ giờ theo mục tiêu</h2>
+            <p className="muted small">
+              Điều chỉnh quỹ giờ trong Lập kế hoạch tuần. Quỹ tuần độc lập với
+              số phiên đã xếp lịch.
+            </p>
+            {goals.map((g) => {
+              const budget =
+                budgets.find((b) => b.week_start === week && b.goal_id === g.id)
+                  ?.planned_minutes ?? (g.weekly_hours || 0) * 60;
+              const actual = work
+                .filter((a) => a.goal_id === g.id)
+                .reduce((n, a) => n + Number(a.duration_minutes), 0);
+              return (
+                <div className="budget-row" key={g.id}>
+                  <strong>
+                    <span
+                      className="color-dot"
+                      style={{ background: g.color }}
+                    />
+                    {g.title}
+                  </strong>
+                  <span>
+                    Quỹ tuần {formatMinutes(budget)} · thực làm{" "}
+                    {formatMinutes(actual)} · còn lại{" "}
+                    {formatMinutes(Math.max(0, budget - actual))}
+                  </span>
+                </div>
+              );
+            })}
+          </section>
+          <div className="row-actions">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={recapEnabled}
+                onChange={(e) => {
+                  setRecapEnabled(e.target.checked);
+                  localStorage.setItem(
+                    "unitracker:recap:" + userId,
+                    e.target.checked ? "on" : "off",
                   );
-                })}
-                {!goals.length && (
-                  <p className="muted">
-                    Thêm mục tiêu trước để phân bổ thời gian.
-                  </p>
-                )}
-                <button
-                  className="button primary"
-                  disabled={busy || !goals.length}
-                >
-                  Lưu phân bổ tuần
-                </button>
-              </form>
-            </section>
-            <section className="planning-card">
-              <h2>Phiên học & làm việc</h2>
-              <p className="muted small">
-                Giờ hiển thị theo múi giờ thiết bị. Bấm vào phiên để mở đồng hồ;
-                thời gian nghỉ không được tính.
-              </p>
-              <div className="session-list">
-                {weekly.map((s) => (
-                  <div key={s.id} className={`session-row ${s.status}`}>
-                    <button
-                      className="session-open"
-                      onClick={() => setTimer(s.id)}
-                    >
-                      <span
-                        className="color-dot"
-                        style={{
-                          background:
-                            goals.find((g) => g.id === s.goal_id)?.color ||
-                            "#237a4b",
-                        }}
-                      />
-                      <div>
-                        <strong>{s.title}</strong>
-                        <span>
-                          {formatDate(
-                            localDateTime(s.scheduled_start).slice(0, 10),
-                          )}{" "}
-                          ·{" "}
-                          {s.is_unscheduled
-                            ? "Chưa xếp giờ"
-                            : `${localDateTime(s.scheduled_start).slice(11)} – ${localDateTime(s.scheduled_end).slice(11)}`}
-                        </span>
-                        <small>
-                          {statusText[s.status]} ·{" "}
-                          {formatMinutes(s.planned_minutes)}
-                        </small>
-                      </div>
-                      {s.status === "running" ? (
-                        <Pause size={18} />
-                      ) : (
-                        <Play size={18} />
-                      )}
-                    </button>
-                    {s.status === "planned" && (
-                      <div className="row-actions">
-                        <button
-                          className="text-button"
-                          onClick={() => setEdit(s)}
-                        >
-                          Sửa
-                        </button>
-                        <button
-                          className="icon-button"
-                          aria-label={`Xóa phiên ${s.title}`}
-                          disabled={busy}
-                          onClick={async () => {
-                            setBusy(true);
-                            try {
-                              const r = await getSupabase()!
-                                .from("focus_sessions")
-                                .delete()
-                                .eq("id", s.id)
-                                .eq("status", "planned");
-                              if (r.error) throw r.error;
-                              await reload();
-                            } catch (e) {
-                              setError(errorMessage(e));
-                            } finally {
-                              setBusy(false);
-                            }
-                          }}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {!weekly.length && (
-                  <div className="planning-empty">
-                    <Clock3 size={32} />
-                    <p>Tuần này chưa có phiên nào.</p>
-                    <button
-                      className="text-button"
-                      onClick={() => (userId ? setEdit("new") : onAuth())}
-                    >
-                      Đặt khung giờ đầu tiên
-                    </button>
-                  </div>
-                )}
-              </div>
-            </section>
+                }}
+              />
+              Hiện ô bổ sung nội dung sau khi dừng
+            </label>
+            {missingContent.length > 0 && (
+              <button
+                className="text-button"
+                onClick={() => setDailyContent(true)}
+              >
+                Bổ sung nội dung hôm nay ({missingContent.length})
+              </button>
+            )}
           </div>
         </div>
+      )}
+      {recap && (
+        <SessionRecap
+          key={recap.id}
+          session={recap}
+          recent={[
+            ...new Set(
+              sessions
+                .filter(
+                  (s) =>
+                    s.id !== recap.id &&
+                    s.goal_id === recap.goal_id &&
+                    s.actual,
+                )
+                .sort((a, b) => b.created_at.localeCompare(a.created_at))
+                .map((s) => s.actual!),
+            ),
+          ].slice(0, 3)}
+          onClose={closeRecap}
+          onSave={(value) => saveContent(recap.id, undefined, value)}
+          onDisable={() => {
+            localStorage.setItem("unitracker:recap:" + userId, "off");
+            setRecapEnabled(false);
+            setRecap(null);
+          }}
+        />
+      )}
+      {dailyContent && (
+        <Dialog
+          title="Bổ sung nội dung hôm nay"
+          onClose={() => setDailyContent(false)}
+        >
+          <div className="form">
+            {missingContent.map((s) => (
+              <label key={s.id}>
+                {goals.find((g) => g.id === s.goal_id)?.title} ·{" "}
+                {formatMinutes(s.elapsed_seconds / 60)}
+                <input
+                  maxLength={160}
+                  placeholder="Nội dung thực tế"
+                  onBlur={(e) => {
+                    if (e.target.value.trim())
+                      void saveContent(
+                        s.id,
+                        undefined,
+                        e.target.value.trim(),
+                      ).catch((e) => setError(errorMessage(e)));
+                  }}
+                />
+              </label>
+            ))}
+            {error && <p className="form-error">{error}</p>}
+          </div>
+        </Dialog>
+      )}
+      {detailSession && (
+        <Dialog
+          title={detailSession.intent || detailSession.title}
+          onClose={() => setDetail(null)}
+        >
+          <div className="form">
+            <p>
+              {detailSession.is_unscheduled
+                ? "Chưa xếp giờ"
+                : localDateTime(detailSession.scheduled_start).replace(
+                    "T",
+                    " · ",
+                  )}{" "}
+              · {formatMinutes(detailSession.planned_minutes)}
+            </p>
+            <p>{detailSession.intent || "Chưa chọn nội dung"}</p>
+            <div className="row-actions">
+              <button
+                className="button"
+                onClick={() => {
+                  setEdit(detailSession);
+                  setDetail(null);
+                }}
+              >
+                Sửa giờ / nội dung
+              </button>
+              <button
+                className="button"
+                onClick={() => {
+                  setEdit(detailSession);
+                  setDetail(null);
+                }}
+              >
+                Dời sang ngày khác
+              </button>
+              <button
+                className="button primary"
+                onClick={() => {
+                  setTimer(detailSession.id);
+                  setDetail(null);
+                }}
+              >
+                Mở timer
+              </button>
+              <button
+                className="button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    const r = await getSupabase()!
+                      .from("focus_sessions")
+                      .delete()
+                      .eq("id", detailSession.id)
+                      .eq("user_id", userId!);
+                    if (r.error) throw r.error;
+                    setDetail(null);
+                    await reload();
+                    await onChanged();
+                  } catch (e) {
+                    setError(errorMessage(e));
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Xóa phiên
+              </button>
+            </div>
+            {error && (
+              <p role="alert" className="form-error">
+                {error}
+              </p>
+            )}
+          </div>
+        </Dialog>
+      )}
+      {activityEdit && (
+        <ActivityForm
+          activity={activityEdit}
+          goals={goals}
+          defaultDate={activityEdit.occurred_on}
+          onClose={() => setActivityEdit(undefined)}
+          onSave={async (data, id) => {
+            const r = await getSupabase()!
+              .from("activities")
+              .update(data)
+              .eq("id", id!)
+              .eq("user_id", userId!);
+            if (r.error) throw r.error;
+            await onChanged();
+            await reload();
+          }}
+        />
+      )}
+      {activityDetail && (
+        <Dialog
+          title={activityDetail.title}
+          onClose={() => setActivityDetail(undefined)}
+        >
+          <div className="form">
+            <p>
+              {formatDate(activityDetail.occurred_on, true)} ·{" "}
+              {formatMinutes(activityDetail.duration_minutes)} · Đã làm
+            </p>
+            <div className="row-actions">
+              <button
+                className="button"
+                onClick={() => {
+                  setActivityEdit(activityDetail);
+                  setActivityDetail(undefined);
+                }}
+              >
+                Sửa giờ / nội dung
+              </button>
+              <button
+                className="button"
+                onClick={() => {
+                  setActivityEdit(activityDetail);
+                  setActivityDetail(undefined);
+                }}
+              >
+                Dời sang ngày khác
+              </button>
+              <button
+                className="button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    const r = await getSupabase()!
+                      .from("activities")
+                      .delete()
+                      .eq("id", activityDetail.id)
+                      .eq("user_id", userId!);
+                    if (r.error) throw r.error;
+                    setActivityDetail(undefined);
+                    await onChanged();
+                  } catch (e) {
+                    setError(errorMessage(e));
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Xóa hoạt động
+              </button>
+            </div>
+            {error && <p className="form-error">{error}</p>}
+          </div>
+        </Dialog>
       )}
       {edit && (
         <SessionEditor
           session={edit === "new" ? undefined : edit}
           goals={goals}
           userId={userId}
-          onClose={() => setEdit(null)}
+          defaultDate={preset?.day}
+          defaultTime={preset?.time}
+          onClose={() => {
+            setEdit(null);
+            setPreset(null);
+          }}
           onSaved={async () => {
             await reload();
             await onChanged();
@@ -546,6 +702,7 @@ export default function PlanningHub({
         <SessionTimer
           key={selected.id}
           session={selected}
+          stopAt={pendingStops[selected.id]}
           busy={busy}
           error={error}
           onClose={() => {
@@ -581,6 +738,7 @@ export default function PlanningHub({
 
 function SessionTimer({
   session,
+  stopAt,
   busy,
   error,
   onClose,
@@ -588,6 +746,7 @@ function SessionTimer({
   onDiscard,
 }: {
   session: FocusSession;
+  stopAt?: string;
   busy: boolean;
   error: string;
   onClose: () => void;
@@ -598,7 +757,7 @@ function SessionTimer({
     [notes, setNotes] = useState(session.notes);
   const stopped = useRef(false);
   const surface = useRef<HTMLDivElement>(null);
-  const elapsed = sessionElapsed(session, now),
+  const elapsed = sessionElapsed(session, stopAt ? Date.parse(stopAt) : now),
     remaining = session.planned_minutes * 60 - elapsed;
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 250);
@@ -609,14 +768,15 @@ function SessionTimer({
       remaining === 0 &&
       session.status === "running" &&
       !stopped.current &&
-      !busy
+      !busy &&
+      !stopAt
     ) {
       stopped.current = true;
       void onAction("stop").catch(() => {
-        stopped.current = false;
+        stopped.current = true;
       });
     }
-  }, [remaining, session.status, busy, onAction]);
+  }, [remaining, session.status, busy, onAction, stopAt]);
   return (
     <Dialog
       title={session.title}
@@ -638,7 +798,7 @@ function SessionTimer({
           {formatMinutes(session.planned_minutes)}
         </p>
         <div className="timer-actions">
-          {["planned", "paused"].includes(session.status) && (
+          {!stopAt && ["planned", "paused"].includes(session.status) && (
             <button
               className="button"
               disabled={busy}
@@ -648,7 +808,7 @@ function SessionTimer({
               {session.status === "paused" ? "Tiếp tục" : "Bắt đầu"}
             </button>
           )}
-          {session.status === "running" && (
+          {!stopAt && session.status === "running" && (
             <button
               className="button"
               disabled={busy}
@@ -665,7 +825,7 @@ function SessionTimer({
               onClick={() => void onAction("stop").catch(() => {})}
             >
               <Square size={17} />
-              Kết thúc
+              {stopAt ? "Thử ghi lại" : "Dừng & tự lưu"}
             </button>
           )}
           <button
@@ -699,7 +859,7 @@ function SessionTimer({
             Một dòng ghi chú
             <textarea
               value={notes}
-              maxLength={4000}
+              maxLength={160}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Ví dụ: đọc xong 3 paper về layout parsing"
             />

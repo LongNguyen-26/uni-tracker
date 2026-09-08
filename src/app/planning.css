@@ -758,3 +758,39 @@
 .preview-details input[type="color"] {
   height: 32px;
 }
+
+.session-recap {
+  position: fixed;
+  bottom: 18px;
+  right: 24px;
+  z-index: 60;
+  width: min(520px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid #bfd2b9;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 35px #18362222;
+  display: grid;
+  gap: 10px;
+}
+.session-recap form {
+  display: flex;
+  gap: 8px;
+}
+.session-recap input {
+  min-width: 0;
+  flex: 1;
+}
+.session-recap .row-actions {
+  font-size: 12px;
+}
+.weekly-budget-readonly {
+  margin: 20px 0;
+}
+.weekly-budget-readonly .budget-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}

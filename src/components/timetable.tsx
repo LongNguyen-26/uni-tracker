@@ -1,13 +1,7 @@
 "use client";
 import { useState, type FormEvent } from "react";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  Play,
-  Pencil,
-  Trash2,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
+import WeekHourGrid from "./week-hour-grid";
 import Dialog from "./dialog";
 import DatePicker from "./date-picker";
 import { getSupabase } from "@/lib/supabase";
@@ -16,6 +10,7 @@ import {
   addDays,
   formatDate,
   todayKey,
+  type Activity,
   type Goal,
   type Profile,
 } from "@/lib/timeline";
@@ -31,8 +26,6 @@ import {
   clockMinutes,
   minuteClock,
   journeySemesters,
-  timetableOnDay,
-  sessionsOnDay,
   weekCapacity,
   distributeWeek,
   type TimetableEntry,
@@ -52,6 +45,10 @@ export default function Timetable({
   onAuth,
   onChanged,
   onSession,
+  activities,
+  onActivity,
+  onCreate,
+  onIntent,
 }: {
   week: string;
   setWeek: (v: string) => void;
@@ -65,12 +62,15 @@ export default function Timetable({
   onAuth: () => void;
   onChanged: () => Promise<void>;
   onSession: (id: string) => void;
+  activities: Activity[];
+  onActivity: (id: string) => void;
+  onCreate: (day: string, time: string) => void;
+  onIntent: (id: string, intent: string) => Promise<void>;
 }) {
   const [edit, setEdit] = useState<TimetableEntry | "new" | null>(null),
     [planner, setPlanner] = useState(false),
     [error, setError] = useState("");
-  const capacity = weekCapacity(week, profile, entries, sessions, goals),
-    days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
+  const capacity = weekCapacity(week, profile, entries, sessions, goals);
   return (
     <section className="timetable-section">
       <div className="section-heading">
@@ -108,9 +108,13 @@ export default function Timetable({
           Giữ cho đợt thi <b>{formatMinutes(capacity.reserved)}</b>
         </span>
         <span>
-          Còn trống <b>{formatMinutes(capacity.available)}</b>
+          Còn có thể phân bổ <b>{formatMinutes(capacity.available)}</b>
         </span>
       </div>
+      <p className="muted small">
+        Khoảng trắng trên lịch là giờ chưa có lịch. Quỹ còn phân bổ ở trên đã
+        trừ phần dự trữ cho đợt thi.
+      </p>
       {capacity.exams.length > 0 && (
         <p className="import-warning">
           Tuần có {capacity.exams.map((g) => g.title).join(", ")}. Đã giữ lại{" "}
@@ -118,101 +122,23 @@ export default function Timetable({
           tế vẫn cần log riêng.
         </p>
       )}
-      <div className="week-board" aria-label="Thời khóa biểu tuần">
-        {days.map((day, i) => (
-          <section
-            className={`week-day ${day === todayKey() ? "current" : ""}`}
-            key={day}
-          >
-            <h3>
-              {["T2", "T3", "T4", "T5", "T6", "T7", "CN"][i]}{" "}
-              <small>{formatDate(day)}</small>
-            </h3>
-            <div className="week-day-content">
-              {[
-                ...timetableOnDay(entries, day).map((e) => ({
-                  at: e.start_minute,
-                  node: (
-                    <div
-                      className="class-block"
-                      key={e.id}
-                      style={
-                        e.goal_id
-                          ? {
-                              borderLeftColor: goals.find(
-                                (g) => g.id === e.goal_id,
-                              )?.color,
-                            }
-                          : undefined
-                      }
-                    >
-                      <small>
-                        {e.all_day
-                          ? "Cả ngày"
-                          : `${minuteClock(e.start_minute)}–${minuteClock(e.end_minute)}`}
-                      </small>
-                      <strong>{e.title}</strong>
-                      <span>
-                        {e.kind === "class" ? "Lớp học" : "Việc cố định"}
-                        {e.goal_id
-                          ? ` · ${goals.find((g) => g.id === e.goal_id)?.title || "Mục tiêu"}`
-                          : ""}
-                      </span>
-                      <button
-                        className="icon-button"
-                        aria-label={`Sửa lịch ${e.title}`}
-                        onClick={() => setEdit(e)}
-                      >
-                        <Pencil size={12} />
-                      </button>
-                    </div>
-                  ),
-                })),
-                ...sessionsOnDay(sessions, day).map((s) => ({
-                  at: clockMinutes(localDateTime(s.scheduled_start).slice(11)),
-                  node: (
-                    <button
-                      key={s.id}
-                      className={`week-session ${s.status === "completed" ? "done" : "planned"}`}
-                      style={
-                        {
-                          "--goal-color":
-                            goals.find((g) => g.id === s.goal_id)?.color ||
-                            "#64748b",
-                        } as React.CSSProperties
-                      }
-                      onClick={() => onSession(s.id)}
-                    >
-                      <small>
-                        {s.is_unscheduled
-                          ? `${formatMinutes(s.planned_minutes)} · Chưa xếp giờ`
-                          : `${localDateTime(s.scheduled_start).slice(11)}–${localDateTime(s.scheduled_end).slice(11)}`}
-                      </small>
-                      <strong>{s.title}</strong>
-                      <span>
-                        <Play size={11} />
-                        {s.status === "completed"
-                          ? "Đã xác nhận"
-                          : s.status === "running"
-                            ? "Đang chạy"
-                            : s.status === "paused"
-                              ? "Tạm dừng"
-                              : "Dự định"}
-                      </span>
-                    </button>
-                  ),
-                })),
-              ]
-                .sort((a, b) => a.at - b.at)
-                .map((x) => x.node)}
-              {!timetableOnDay(entries, day).length &&
-                !sessionsOnDay(sessions, day).length && (
-                  <p className="muted small">Ngày còn trống</p>
-                )}
-            </div>
-          </section>
-        ))}
-      </div>
+      <WeekHourGrid
+        key={week}
+        week={week}
+        profile={profile}
+        goals={goals}
+        entries={entries}
+        sessions={sessions}
+        activities={activities}
+        onCreate={onCreate}
+        onIntent={onIntent}
+        onOpen={(e) => {
+          if (e.type === "fixed")
+            setEdit(entries.find((x) => x.id === e.id) || null);
+          else if (e.type === "session") onSession(e.id);
+          else onActivity(e.id);
+        }}
+      />
       <div className="row-actions">
         <button
           className="text-button"

@@ -173,7 +173,7 @@ export function weekCapacity(
     }));
     fixed += mergeIntervals(blocks).reduce((n, b) => n + b.end - b.start, 0);
     for (const s of sessionsOnDay(sessions, day)) {
-      if (s.is_unscheduled) continue;
+      if (s.is_unscheduled || s.status === "completed") continue;
       const a = localDateTime(s.scheduled_start),
         b = localDateTime(s.scheduled_end);
       blocks.push({
@@ -309,6 +309,7 @@ export function distributeWeek(
       if (duration < 15) break;
       rows.push({
         title: g.title,
+        intent: "",
         goal_id: g.id,
         notes: "Phân bổ từ kế hoạch tuần",
         scheduled_start: new Date(
