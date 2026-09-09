@@ -14,6 +14,12 @@ User requested that every push/deployment be recorded here. After each release, 
 
 Production: https://uni-tracker-sigma.vercel.app · GitHub: https://github.com/LongNguyen-26/uni-tracker · Supabase: `cerynvewyhoazzhksmcc`.
 
+Preview: `uni-tracker-git-<branch>-longnguyen-26s-projects.vercel.app` · Supabase: `rhwnsstyyubfavrzvyzi`
+(project `uni-tracker-preview`). The two environments are separate: Vercel Preview environment
+variables point at the preview project, Production and Development variables at `cerynvewyhoazzhksmcc`.
+`NEXT_PUBLIC_*` is inlined at build time, so changing those variables requires a rebuild of the
+affected environment, not just a redeploy of another one.
+
 | Commit / push | Changes | Verified production deployment |
 | --- | --- | --- |
 | `976537a` | First push: Vietnamese university timeline, goals, activity history, Supabase email/password Auth and owner RLS. | READY — `dpl_CoE668yHfHQPz1PHrGBi6cJbjS6q` |
@@ -51,6 +57,29 @@ Production: https://uni-tracker-sigma.vercel.app · GitHub: https://github.com/L
 - Public import choices are Mục tiêu, Lịch cố định and Hoạt động; planned/completed is the activity status. Legacy export formats remain readable. Fixed commitments reserve time; links to goals inform their weekly allocation without fabricating completed work.
 - New goals can have no measure, a numeric target or a checklist. Weekly hours belong to the goal and can be overridden for an individual week.
 - A goal's dates mark its deadline or event window, never an automatic span from today or the start of the semester. A fixed deadline uses one date; a Hackathon can use its three event dates; a vague late-month deadline uses a clearly labelled 7–14-day approximate window. Selecting the semester does not change these dates.
+
+### Preview environment on its own Supabase project — 2026-09-09
+
+- `uni-tracker-preview` (`rhwnsstyyubfavrzvyzi`) was built from the migration history alone: the twelve
+  files in `supabase/migrations` were replayed in filename order, then the branch migration
+  `20260909180000_timer_overtime.sql` on top. Production received nothing; its catalogue digest was
+  captured before and after the work and is byte-identical.
+- Baseline check compared both projects' catalogues. Columns (92), constraints (85), indexes (22),
+  policies (17), triggers (7), grants (147), per-table RLS flags and extensions (5) all matched on
+  md5. Production's twelve recorded migrations match the repository's twelve files one to one, so no
+  migration has ever been applied outside the repository.
+- **Known drift, deliberately not corrected:** production carries `public.rls_auto_enable()` and the
+  `ensure_rls` event trigger; the preview project does not. Neither is created by any migration —
+  they belong to the Supabase project template, which changed between the two projects' creation
+  dates, and `20260906065923_harden_default_function_permissions.sql` already tolerates the function
+  being absent. Every table enables RLS explicitly, so current behaviour is identical. The only
+  forward risk is a future migration that creates a table without enabling RLS: production would
+  cover for it, preview would not. Do not hand-write a replacement for platform-owned objects.
+- Preview auth still has `mailer_autoconfirm` off and no SMTP, so sign-up on a preview build waits
+  for a confirmation mail that never arrives. Turn autoconfirm on for that project before using a
+  disposable account there.
+- Seed data on preview is synthetic (`preview-seed@example.invalid`): one profile, two goals, one
+  timetable entry. No production rows were copied.
 
 ### Known issues
 
