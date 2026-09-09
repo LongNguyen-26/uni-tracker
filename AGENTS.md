@@ -81,6 +81,42 @@ affected environment, not just a redeploy of another one.
 - Seed data on preview is synthetic (`preview-seed@example.invalid`): one profile, two goals, one
   timetable entry. No production rows were copied.
 
+### Preview release `f175364` — 2026-09-10 (start and persistence, branch only)
+
+- Branch `refactor/ui-v2` only. Nothing merged to `main`; production still runs `fef32b5`.
+- Reframes the UI around the philosophy the user stated: a self-learner opens the app on a free
+  evening, starts, and later looks back at what the effort adds up to. Starting moved into the top
+  bar so it is one click from every view; `Bắt đầu ngay` now asks only for the goal (colour chips,
+  last worked goal preselected, remembered timer mode applied silently, intent folded away because
+  the recap asks afterwards). Goal cards became journey cards: lifetime time invested, days shown
+  up, sessions, current phase, a twelve-week strip, this week, last session and `Tiếp tục` as the
+  primary action. The recap after a session names the new total for that goal.
+- Days shown up is the headline number and the streak trails it; there is no broken-streak imagery.
+  After a week away a card says the hours are still there. Goals sort by most recently worked, with
+  the old deadline order kept as a choice. The journal became a tab inside the journey page, so the
+  `View` union is now three entries and `NAV` has three items.
+- No migration. The release is client-side only: schema, RLS policies and RPCs are unchanged from
+  `2a855e3`. Every number is derived from the activity history already loaded in `tracker.tsx`, so
+  the new `src/lib/journey.ts` is pure and unit-tested (11 new cases, 79 total).
+- Validation: 79 unit tests, typecheck, lint, prettier and the production build pass on `f175364`.
+- Preview READY: `dpl_FzmJJpLHn74WtmVkR1t1AhP8DUVj` for `f1753646015bb939c51c25bef7fc03bf845ba2e0`,
+  branch alias assigned with no alias error, build about 21 seconds. The earlier
+  `dpl_9GVFegzbno3zetaQijCxGG7pq2Lr` (`99e4919`) was also READY.
+- Preview smoke test ran logged out against the demo journey, which exercises every new surface
+  except actually running a clock: three nav items with the journal gone, the top bar showing
+  `Bắt đầu ngay` which opens the auth dialog for a guest, eight journey cards with totals, twelve
+  strip cells with proportional bars and an empty first week, recency order, the sort control
+  switching to deadline order, and the map/journal tabs swapping heading, eyebrow and action.
+  Console reported 0 errors and 0 warnings. Checked at the pane's own width and at 1280×900.
+- `99e4919` was fixed by `f175364` after the Preview showed two lines saying nothing: a goal whose
+  only open step is its own deadline was headed "Chặng hiện tại · Hạn hoàn thành" right above the
+  row carrying that date, and a finished goal with no logged time was still invited to record a
+  first session.
+- **Not verified on the deployed build:** starting, pausing and stopping a real session, the recap's
+  new total, and `Tiếp tục` from a goal card. Preview auth still has `mailer_autoconfirm` off on
+  `uni-tracker-preview`, so no disposable account can sign in there; those paths are covered by the
+  unit tests and by the local build only.
+
 ### Known issues
 
 - Resolved in release `b546fb9`: the weekly intention summary now counts planned session duration separately from weekly goal budgets. Imported planned activities no longer depend on having a budget to appear in that summary.
