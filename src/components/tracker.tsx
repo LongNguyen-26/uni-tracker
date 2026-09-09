@@ -11,7 +11,7 @@ import {
   ChevronRight,
   CircleCheck,
   Clock3,
-  Flame,
+  Flag,
   GraduationCap,
   LayoutGrid,
   Leaf,
@@ -25,6 +25,7 @@ import {
   Settings2,
   Target,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
@@ -49,8 +50,9 @@ import Dialog from "./dialog";
 import { GoalForm, SettingsForm } from "./journey-forms";
 import PlanningHub from "./planning";
 import SetupGuide from "./setup-guide";
+import SplitButton from "./split-button";
 import { TimetableForm } from "./timetable";
-import type { SetupPart } from "@/lib/onboarding";
+import { setupGuidance, type SetupPart } from "@/lib/onboarding";
 import dynamic from "next/dynamic";
 const ImportDialog = dynamic(() => import("./import-dialog"));
 const Preparation = dynamic(() => import("./preparation"));
@@ -77,7 +79,7 @@ import { goalsInSemester, confirmMilestoneDate } from "@/lib/journey-view";
 import { contractMilestoneWindow } from "@/lib/milestone-motion";
 import type { ImportContext } from "@/lib/importer";
 import { milestonesOnDay, datedMilestones } from "@/lib/milestones";
-import ProductivityPanel from "./productivity";
+import SemesterRhythm from "./semester-rhythm";
 import {
   activityLabel,
   formatMinutes,
@@ -88,18 +90,27 @@ import {
 
 type View = "timeline" | "goals" | "journal" | "planning";
 type Modal =
-  | { kind: "auth" | "recovery" | "settings" | "prepare" | "timetable" }
+  | {
+      kind:
+        | "auth"
+        | "recovery"
+        | "settings"
+        | "prepare"
+        | "timetable"
+        | "pick-goal";
+    }
   | { kind: "import"; initialKind?: "timetable"; context?: ImportContext }
   | { kind: "session"; date?: string }
   | { kind: "goal"; goal?: Goal; date?: string }
   | { kind: "activity"; activity?: Activity; date?: string }
   | { kind: "delete"; table: "goals" | "activities"; id: string; title: string }
   | null;
+// Ordered by how often a student opens them, not by importance.
 const NAV = [
   { id: "planning" as const, label: "Tuần & phiên học", icon: Clock3 },
-  { id: "timeline" as const, label: "Hành trình đại học", icon: LayoutGrid },
   { id: "goals" as const, label: "Mục tiêu của tôi", icon: Target },
   { id: "journal" as const, label: "Nhật ký hoạt động", icon: BookOpen },
+  { id: "timeline" as const, label: "Hành trình đại học", icon: LayoutGrid },
 ];
 
 function SemesterCard({
@@ -689,6 +700,11 @@ export default function Tracker() {
   );
   const activeGoals = goals.filter((g) => g.progress < 100);
   const completedGoals = goals.filter((g) => g.progress === 100);
+  // A badge only earns its place when it points at something to deal with.
+  const overdueGoals = activeGoals.filter(
+    (g) => !!g.deadline && g.deadline < today,
+  );
+  const runningSession = sessions.find((s) => s.status === "running");
   const deadlines = activeGoals
     .filter((g): g is Goal & { deadline: string } => !!g.deadline)
     .sort((a, b) => a.deadline.localeCompare(b.deadline));
@@ -697,17 +713,33 @@ export default function Tracker() {
       b.occurred_on.localeCompare(a.occurred_on) ||
       b.created_at.localeCompare(a.created_at),
   );
-  const activeDays = [
-    ...new Set(workActivities.map((a) => a.occurred_on)),
-  ].filter(
-    (day) =>
-      semesters.length &&
-      day >= semesters[0].start &&
-      day <= semesters[semesters.length - 1].end,
-  ).length;
   const currentSemester = semesters.find(
     (s) => today >= s.start && today <= s.end,
   );
+  // The numbers that used to sit in cards, as one line under the title.
+  const shownSemester =
+    zoom === "all" ? currentSemester : semesters[Number(zoom)];
+  const termMeta = shownSemester
+    ? (() => {
+        const logs = workActivities.filter(
+          (a) =>
+            a.occurred_on >= shownSemester.start &&
+            a.occurred_on <= shownSemester.end,
+        );
+        const weeks = Math.round(shownSemester.days.length / 7);
+        const week = Math.min(
+          weeks,
+          Math.floor(daysBetween(shownSemester.start, today) / 7) + 1,
+        );
+        return {
+          weeks,
+          week: today > shownSemester.end ? weeks : Math.max(1, week),
+          current: today >= shownSemester.start && today <= shownSemester.end,
+          minutes: logs.reduce((n, a) => n + Number(a.duration_minutes), 0),
+          days: new Set(logs.map((a) => a.occurred_on)).size,
+        };
+      })()
+    : null;
   const journeyProgress = semesters.length
     ? Math.max(
         0,
@@ -1013,19 +1045,24 @@ export default function Tracker() {
       )
     : [];
 
+  const setupCounts =
+    user && setupSchedule?.userId === user.id
+      ? {
+          timetable: setupSchedule.entries.length,
+          goals: goals.length,
+          activities: sessions.length,
+        }
+      : null;
+  const setupDone = setupCounts
+    ? setupGuidance(setupCounts, "planning").done
+    : 3;
   const setupGuide =
-    user &&
-    setupSchedule?.userId === user.id &&
-    (view === "goals" || view === "planning") ? (
+    user && setupCounts && (view === "goals" || view === "planning") ? (
       <SetupGuide
         key={user.id}
         userId={user.id}
         page={view}
-        counts={{
-          timetable: setupSchedule.entries.length,
-          goals: goals.length,
-          activities: sessions.length,
-        }}
+        counts={setupCounts}
         onOpen={openSetupPart}
       />
     ) : null;
@@ -1075,7 +1112,6 @@ export default function Tracker() {
             <span className="brand-dot">.</span>
           </span>
         </Link>
-        <div className="workspace-label">KHÔNG GIAN CỦA BẠN</div>
         <nav aria-label="Điều hướng chính">
           {NAV.map((item) => (
             <button
@@ -1085,41 +1121,60 @@ export default function Tracker() {
             >
               <item.icon size={18} />
               {item.label}
-              {item.id === "goals" && goals.length > 0 && (
-                <span className="nav-count">{goals.length}</span>
+              {item.id === "goals" && overdueGoals.length > 0 && (
+                <span
+                  className="nav-count"
+                  title={`${overdueGoals.length} mục tiêu đã quá hạn`}
+                >
+                  {overdueGoals.length}
+                </span>
               )}
             </button>
           ))}
         </nav>
-        <div className="sidebar-journey">
-          <div className="journey-icon">
-            <Leaf size={21} />
-          </div>
-          <strong>Từng chút, mỗi ngày.</strong>
-          <p>
-            Đại học là hành trình dài.
-            <br />
-            Mỗi bước tiến đều đáng nhớ.
-          </p>
-          <div className="mini-heatmap" aria-hidden="true">
-            {Array.from({ length: 42 }, (_, i) => (
-              <i className={`level-${((i * 7) % 11) % 5}`} key={i} />
-            ))}
-          </div>
-        </div>
-        <div className="sidebar-bottom">
+        {user && setupCounts && setupDone < 3 && (
           <button
-            className="nav-item"
-            onClick={() => openWrite({ kind: "prepare" })}
+            className="sidebar-setup"
+            onClick={() => openSetupPart("all")}
           >
-            <Settings2 size={18} /> Thiết lập ban đầu
+            <span>
+              Thiết lập
+              <strong>{setupDone}/3</strong>
+            </span>
+            <span className="setup-track" aria-hidden="true">
+              <i style={{ width: `${(setupDone / 3) * 100}%` }} />
+            </span>
+            <small>
+              {!setupCounts.timetable
+                ? "Còn thời khóa biểu"
+                : !setupCounts.goals
+                  ? "Còn mục tiêu học kỳ"
+                  : "Còn kế hoạch tự học"}
+            </small>
           </button>
+        )}
+        {runningSession && (
+          <button
+            className="sidebar-timer"
+            onClick={() => {
+              navigate("planning");
+              setSessionRequest(runningSession.id);
+            }}
+          >
+            <span className="running-dot" aria-hidden="true" />
+            <span>
+              <strong>{runningSession.title}</strong>
+              <small>Đang chạy · mở phiên</small>
+            </span>
+          </button>
+        )}
+        <div className="sidebar-bottom">
           <button
             className="nav-item"
             onClick={() => openWrite({ kind: "settings" })}
           >
             <Settings2 size={18} />
-            Cài đặt hành trình
+            Cài đặt
           </button>
           <div className="account">
             <span className="avatar">
@@ -1204,7 +1259,7 @@ export default function Tracker() {
                       }}
                     >
                       <Settings2 size={16} />
-                      Cài đặt hành trình
+                      Cài đặt
                     </button>
                     <button
                       onClick={() => {
@@ -1279,33 +1334,62 @@ export default function Tracker() {
                 <span className="heading-dot">.</span>
               </h1>
               <p>
-                {view === "timeline"
-                  ? `${profile?.study_years || 4} năm, ${(profile?.study_years || 4) * 2} học kỳ — và những bước tiến của bạn.`
-                  : view === "goals"
-                    ? "Biến những dự định thành những điều đã làm được."
-                    : "Lưu lại từng ngày bạn đã học hỏi, trải nghiệm và trưởng thành."}
+                {view === "timeline" && shownSemester && termMeta ? (
+                  <>
+                    Năm {shownSemester.year} · học kỳ {shownSemester.term} ·
+                    tuần {termMeta.week}/{termMeta.weeks}
+                    <i className="meta-sep" />
+                    {formatMinutes(termMeta.minutes)} đã ghi
+                    <i className="meta-sep" />
+                    {termMeta.days} ngày có hoạt động
+                    {termMeta.current && (
+                      <>
+                        <i className="meta-sep" />
+                        chuỗi {streak(workActivities, today)} ngày
+                      </>
+                    )}
+                  </>
+                ) : view === "timeline" ? (
+                  `${profile?.study_years || 4} năm, ${(profile?.study_years || 4) * 2} học kỳ — và những bước tiến của bạn.`
+                ) : view === "goals" ? (
+                  "Biến những dự định thành những điều đã làm được."
+                ) : (
+                  "Lưu lại từng ngày bạn đã học hỏi, trải nghiệm và trưởng thành."
+                )}
               </p>
             </div>
             {view !== "timeline" && (
               <div className="heading-actions">
                 {view === "goals" ? (
-                  <>
-                    <button
-                      className="button"
-                      onClick={() =>
-                        openWrite({ kind: "import", context: "goals" })
-                      }
-                    >
-                      Nhập mục tiêu
-                    </button>
-                    <button
-                      className="button primary"
-                      onClick={() => openWrite({ kind: "goal" })}
-                    >
-                      <Plus size={17} />
-                      Thêm mục tiêu
-                    </button>
-                  </>
+                  <SplitButton
+                    label="Thêm mục tiêu"
+                    onClick={() => openWrite({ kind: "goal" })}
+                    actions={[
+                      {
+                        id: "import",
+                        icon: Upload,
+                        label: "Nhập mục tiêu từ file…",
+                        hint: "Kèm cột mốc, nhập một lượt",
+                        onSelect: () =>
+                          openWrite({ kind: "import", context: "goals" }),
+                      },
+                      {
+                        id: "milestone",
+                        icon: Flag,
+                        label: "Thêm cột mốc…",
+                        hint: goals.length
+                          ? "Vào một mục tiêu đã có"
+                          : "Cần có mục tiêu trước",
+                        disabled: !goals.length,
+                        onSelect: () =>
+                          openWrite(
+                            goals.length === 1
+                              ? { kind: "goal", goal: goals[0] }
+                              : { kind: "pick-goal" },
+                          ),
+                      },
+                    ]}
+                  />
                 ) : (
                   <button
                     className="button primary"
@@ -1343,64 +1427,6 @@ export default function Tracker() {
             profile && (
               <>
                 {view === "goals" && setupGuide}
-                <div className="stats-grid" hidden={view === "planning"}>
-                  <div className="stat-card">
-                    <span className="stat-icon">
-                      <Target size={19} />
-                    </span>
-                    <div>
-                      <span>Mục tiêu đang theo đuổi</span>
-                      <strong>
-                        {activeGoals.length}
-                        <small>mục tiêu</small>
-                      </strong>
-                    </div>
-                  </div>
-                  <div className="stat-card">
-                    <span className="stat-icon green">
-                      <CircleCheck size={19} />
-                    </span>
-                    <div>
-                      <span>Mục tiêu đã hoàn thành</span>
-                      <strong>
-                        {completedGoals.length}
-                        <small>cột mốc</small>
-                      </strong>
-                    </div>
-                  </div>
-                  <div className="stat-card">
-                    <span className="stat-icon blue">
-                      <CalendarDays size={19} />
-                    </span>
-                    <div>
-                      <span>Ngày có hoạt động</span>
-                      <strong>
-                        {activeDays.toLocaleString("vi-VN")}
-                        <small>ngày</small>
-                      </strong>
-                    </div>
-                  </div>
-                  <div className="stat-card">
-                    <span className="stat-icon orange">
-                      <Flame size={19} />
-                    </span>
-                    <div>
-                      <span>Chuỗi ngày hiện tại</span>
-                      <strong>
-                        {streak(workActivities, today)}
-                        <small>ngày liên tiếp</small>
-                      </strong>
-                    </div>
-                  </div>
-                </div>
-                {view === "timeline" && (
-                  <ProductivityPanel
-                    activities={activities}
-                    goals={goals}
-                    today={today}
-                    onDay={setSelectedDay}
-                  />
-                )}
                 {view === "timeline" && (
                   <div className="dashboard-columns">
                     <div className="timeline-section">
@@ -1557,6 +1583,16 @@ export default function Tracker() {
                         định · Dấu góc: hạn đã chốt · Nền dải tuần: khoảng sự
                         kiện (viền đứt khi ngày chưa chốt).
                       </p>
+                      {shownSemester && (
+                        <SemesterRhythm
+                          semester={shownSemester}
+                          activities={visibleActivities}
+                          goals={visibleGoals}
+                          today={today}
+                          zoomed={zoom !== "all"}
+                          onWeek={setSelectedDay}
+                        />
+                      )}
                       <div className="journey-footer">
                         <GraduationCap size={18} />
                         <span>
@@ -1709,12 +1745,14 @@ export default function Tracker() {
                   <section className="goals-section">
                     <div className="filter-bar">
                       <div className="status-tabs" aria-label="Lọc trạng thái">
-                        {[
-                          ["all", "Tất cả"],
-                          ["active", "Đang theo đuổi"],
-                          ["done", "Hoàn thành"],
-                          ["overdue", "Quá hạn"],
-                        ].map(([id, label]) => (
+                        {(
+                          [
+                            ["all", "Tất cả", goals.length],
+                            ["active", "Đang theo đuổi", activeGoals.length],
+                            ["done", "Hoàn thành", completedGoals.length],
+                            ["overdue", "Quá hạn", overdueGoals.length],
+                          ] as const
+                        ).map(([id, label, count]) => (
                           <button
                             key={id}
                             className={statusFilter === id ? "selected" : ""}
@@ -1722,6 +1760,7 @@ export default function Tracker() {
                             onClick={() => setStatusFilter(id)}
                           >
                             {label}
+                            <span className="tab-count">{count}</span>
                           </button>
                         ))}
                       </div>
@@ -1979,7 +2018,11 @@ export default function Tracker() {
             <span>
               uni tracker<span className="brand-dot">.</span>
             </span>
-            <span>Mỗi ngày một chút, từng bước một hành trình.</span>
+            <span className="footer-note">
+              <Leaf size={14} />
+              Từng chút, mỗi ngày. Đại học là hành trình dài — mỗi bước tiến đều
+              đáng nhớ.
+            </span>
           </footer>
         </main>
       </div>
@@ -2037,6 +2080,32 @@ export default function Tracker() {
           onClose={() => setModal(null)}
           onSave={saveGoal}
         />
+      )}
+      {modal?.kind === "pick-goal" && (
+        <Dialog
+          title="Thêm cột mốc vào mục tiêu nào?"
+          description="Cột mốc nằm trong mục tiêu, nên hãy chọn mục tiêu trước."
+          onClose={() => setModal(null)}
+        >
+          <div className="goal-picker">
+            {goals.map((goal) => (
+              <button
+                key={goal.id}
+                onClick={() => setModal({ kind: "goal", goal })}
+              >
+                <span
+                  className="color-dot"
+                  style={{ background: goal.color }}
+                />
+                <span>
+                  <strong>{goal.title}</strong>
+                  <small>{goalDateText(goal)}</small>
+                </span>
+                <ChevronRight size={15} />
+              </button>
+            ))}
+          </div>
+        </Dialog>
       )}
       {modal?.kind === "session" && (
         <SessionEditor

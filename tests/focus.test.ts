@@ -6,6 +6,7 @@ import {
   isWork,
   periodBounds,
   productivity,
+  semesterRhythm,
   shiftPeriod,
   splitColor,
   summarizeDays,
@@ -103,4 +104,92 @@ test("completed milestones use a star without inflating focus, history retains d
   );
   assert.equal(report.allocation[0].title, "Archived IELTS");
   assert.equal(formatMinutes(125), "2 giờ 5 phút");
+});
+test("weekly rhythm shares the semester heatmap columns and keeps one stack order", () => {
+  // Two full columns plus a short trailing one, with a leading blank pad cell.
+  const days = [
+    null,
+    "2026-08-04",
+    "2026-08-05",
+    "2026-08-06",
+    "2026-08-07",
+    "2026-08-08",
+    "2026-08-09",
+    "2026-08-10",
+    "2026-08-11",
+    "2026-08-12",
+    "2026-08-13",
+    "2026-08-14",
+    "2026-08-15",
+    "2026-08-16",
+    "2026-08-17",
+    "2026-08-18",
+  ];
+  const rhythm = semesterRhythm(
+    [
+      event({ id: "a", occurred_on: "2026-08-05", duration_minutes: 30 }),
+      event({
+        id: "b",
+        occurred_on: "2026-08-06",
+        duration_minutes: 120,
+        goal_id: goals[1].id,
+        color: goals[1].color,
+      }),
+      event({ id: "c", occurred_on: "2026-08-12", duration_minutes: 45 }),
+      event({ id: "d", occurred_on: "2026-08-17", duration_minutes: 15 }),
+      event({ id: "skip", occurred_on: "2026-08-19", duration_minutes: 600 }),
+      event({ id: "untimed", occurred_on: "2026-08-05", duration_minutes: 0 }),
+      event({
+        id: "auto",
+        occurred_on: "2026-08-05",
+        kind: "progress",
+        duration_minutes: 90,
+      }),
+    ],
+    goals,
+    days,
+    "2026-08-20",
+  );
+  // Columns are cut every 7 cells, exactly as the heatmap fills them, so the
+  // leading blank shares the first column instead of shifting the whole axis.
+  assert.deepEqual(
+    rhythm.weeks.map((w) => [w.start, w.end, w.minutes]),
+    [
+      ["2026-08-04", "2026-08-09", 150],
+      ["2026-08-10", "2026-08-16", 45],
+      ["2026-08-17", "2026-08-18", 15],
+    ],
+  );
+  // A day past the last column is out of the semester and never counted.
+  assert.equal(rhythm.minutes, 210);
+  assert.equal(rhythm.peak, 150);
+  // The larger goal leads the allocation, and every stack repeats that order.
+  assert.deepEqual(
+    rhythm.allocation.map((item) => item.minutes),
+    [120, 90],
+  );
+  assert.deepEqual(
+    rhythm.weeks[0].segments.map((s) => s.id),
+    [goals[1].id, goals[0].id],
+  );
+  assert.deepEqual(
+    rhythm.weeks[2].segments.map((s) => [s.id, s.minutes]),
+    [[goals[0].id, 15]],
+  );
+});
+test("weekly rhythm marks columns after today as future", () => {
+  const rhythm = semesterRhythm(
+    [],
+    goals,
+    Array.from(
+      { length: 14 },
+      (_, i) => `2026-08-${String(4 + i).padStart(2, "0")}`,
+    ),
+    "2026-08-05",
+  );
+  assert.deepEqual(
+    rhythm.weeks.map((w) => w.future),
+    [false, true],
+  );
+  assert.equal(rhythm.peak, 60);
 });

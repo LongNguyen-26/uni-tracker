@@ -74,7 +74,9 @@ export function summarizeDays(goals: Goal[], activities: Activity[]) {
       });
     return map.get(day)!;
   }
-  goals.forEach((g) => { if (g.deadline) get(g.deadline).deadlines.push(g); });
+  goals.forEach((g) => {
+    if (g.deadline) get(g.deadline).deadlines.push(g);
+  });
   activities.forEach((a) => {
     const day = get(a.occurred_on);
     day.activities.push(a);
@@ -187,5 +189,92 @@ export function productivity(
     elapsedDays: Math.max(0, daysBetween(start, effectiveEnd) + 1),
     untimed: logs.filter((a) => !a.duration_minutes).length,
     allocation: [...allocation.values()].sort((a, b) => b.minutes - a.minutes),
+  };
+}
+export type RhythmSegment = {
+  id: string;
+  title: string;
+  color: string;
+  minutes: number;
+};
+export type RhythmWeek = {
+  key: string;
+  start: string;
+  end: string;
+  minutes: number;
+  future: boolean;
+  segments: RhythmSegment[];
+};
+// One bar per column of the semester heatmap, so both read on the same axis.
+export function semesterRhythm(
+  activities: Activity[],
+  goals: Goal[],
+  days: (string | null)[],
+  today: string,
+) {
+  const goalMap = new Map(goals.map((g) => [g.id, g]));
+  const identify = (a: Activity) => ({
+    id: a.goal_id || (a.goal_title ? `archived:${a.goal_title}` : "unassigned"),
+    title:
+      (a.goal_id ? goalMap.get(a.goal_id)?.title : undefined) ||
+      a.goal_title ||
+      "Chưa gắn mục tiêu",
+    color: (a.goal_id ? goalMap.get(a.goal_id)?.color : undefined) || a.color,
+  });
+  const columns: { start: string; end: string }[] = [];
+  for (let i = 0; i < days.length; i += 7) {
+    const week = days.slice(i, i + 7).filter((d): d is string => !!d);
+    if (week.length)
+      columns.push({ start: week[0], end: week[week.length - 1] });
+  }
+  const first = columns[0]?.start,
+    last = columns.at(-1)?.end;
+  const logs =
+    first && last
+      ? activities.filter(
+          (a) =>
+            isWork(a) &&
+            Number(a.duration_minutes) > 0 &&
+            a.occurred_on >= first &&
+            a.occurred_on <= last,
+        )
+      : [];
+  const totals = new Map<string, RhythmSegment>();
+  logs.forEach((a) => {
+    const { id, title, color } = identify(a);
+    const item = totals.get(id) || { id, title, color, minutes: 0 };
+    item.minutes += Number(a.duration_minutes);
+    totals.set(id, item);
+  });
+  // One order for the strip, the legend and every stack, so colours never swap.
+  const allocation = [...totals.values()].sort((a, b) => b.minutes - a.minutes);
+  const rank = new Map(allocation.map((item, i) => [item.id, i]));
+  const weeks: RhythmWeek[] = columns.map((column) => {
+    const inside = logs.filter(
+      (a) => a.occurred_on >= column.start && a.occurred_on <= column.end,
+    );
+    const parts = new Map<string, RhythmSegment>();
+    inside.forEach((a) => {
+      const { id, title, color } = identify(a);
+      const item = parts.get(id) || { id, title, color, minutes: 0 };
+      item.minutes += Number(a.duration_minutes);
+      parts.set(id, item);
+    });
+    return {
+      key: column.start,
+      start: column.start,
+      end: column.end,
+      future: column.start > today,
+      minutes: inside.reduce((sum, a) => sum + Number(a.duration_minutes), 0),
+      segments: [...parts.values()].sort(
+        (a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0),
+      ),
+    };
+  });
+  return {
+    weeks,
+    allocation,
+    minutes: allocation.reduce((sum, item) => sum + item.minutes, 0),
+    peak: Math.max(60, ...weeks.map((w) => w.minutes)),
   };
 }

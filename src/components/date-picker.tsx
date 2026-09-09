@@ -1,5 +1,5 @@
 "use client";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   addDays,
@@ -33,6 +33,28 @@ export default function DatePicker({
   const [open, setOpen] = useState(defaultOpen);
   const [month, setMonth] = useState((value || todayKey()).slice(0, 7));
   const grid = useRef<HTMLDivElement>(null);
+  const popover = useRef<HTMLDivElement>(null);
+  const field = useRef<HTMLDivElement>(null);
+  const [up, setUp] = useState(false);
+  // Open upwards when the month would run past the viewport, so the last rows
+  // stay reachable even inside a card that clips its overflow.
+  useEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const anchor = field.current?.getBoundingClientRect();
+      const height = popover.current?.offsetHeight;
+      if (!anchor || !height) return;
+      const below = window.innerHeight - anchor.bottom;
+      setUp(below < height + 12 && anchor.top > below);
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
   const first = `${month}-01`,
     start = monday(first);
   const move = (delta: number) => {
@@ -47,6 +69,7 @@ export default function DatePicker({
   return (
     <div
       className="date-field"
+      ref={field}
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false);
       }}
@@ -78,8 +101,9 @@ export default function DatePicker({
       </button>
       {open && (
         <div
-          className="date-popover"
+          className={`date-popover ${up ? "drop-up" : ""}`}
           id={id}
+          ref={popover}
           role="group"
           aria-label={`Lịch ${label}`}
         >

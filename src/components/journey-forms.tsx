@@ -81,7 +81,9 @@ export function GoalForm({
     timing_mode: timing,
   } = finalDates(steps);
   const [completed, setCompleted] = useState(goal?.completed_on || todayKey());
-  const [scope, setScope] = useState(goal?.semester_index?.toString() ?? defaultSemesterIndex?.toString() ?? "");
+  const [scope, setScope] = useState(
+    goal?.semester_index?.toString() ?? defaultSemesterIndex?.toString() ?? "",
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const derived = calculatedProgress({
@@ -420,7 +422,10 @@ export function SettingsForm({
         start_year: year,
         start_month: 8,
         study_years: years,
-        onboarding_term: profile.onboarding_term == null ? null : Math.min(profile.onboarding_term, years * 2 - 1),
+        onboarding_term:
+          profile.onboarding_term == null
+            ? null
+            : Math.min(profile.onboarding_term, years * 2 - 1),
         semester_settings: terms,
         confirmed_semesters: confirmed,
         wake_minutes: wake,
@@ -437,7 +442,7 @@ export function SettingsForm({
   }
   return (
     <Dialog
-      title="Cài đặt hành trình"
+      title="Cài đặt"
       description="Các kỳ được ước tính từ năm nhập học. Chỉ cần chỉnh chính xác kỳ bạn đang học."
       onClose={() => {
         if (!busy) onClose();
@@ -454,6 +459,7 @@ export function SettingsForm({
             defaultValue={profile.display_name}
           />
         </label>
+        <h3 className="settings-section">Lộ trình</h3>
         <div className="form-row">
           <label>
             Năm nhập học
@@ -499,6 +505,7 @@ export function SettingsForm({
           Hai. Khi đổi ngày bắt đầu, ngày kết thúc dịch theo cùng thời lượng;
           bạn vẫn có thể sửa ngày kết thúc.
         </p>
+        <h3 className="settings-section">Nhịp ngày</h3>
         <div className="form-row">
           <label>
             Thức dậy

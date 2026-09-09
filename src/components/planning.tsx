@@ -7,22 +7,24 @@ import {
   type ReactNode,
 } from "react";
 import {
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Pause,
   Play,
-  Plus,
   Square,
   Maximize2,
   Upload,
+  Wand2,
 } from "lucide-react";
 import SessionRecap from "./session-recap";
+import SplitButton from "./split-button";
 import { ActivityForm } from "./forms";
 import Dialog from "./dialog";
 import DatePicker from "./date-picker";
 import SessionEditor from "./session-editor";
 import Timetable, { WeekPlanner } from "./timetable";
-import type { TimetableEntry } from "@/lib/schedule";
+import { weekCapacity, type TimetableEntry } from "@/lib/schedule";
 import { getSupabase } from "@/lib/supabase";
 import { errorMessage } from "@/lib/errors";
 import {
@@ -116,6 +118,7 @@ export default function PlanningHub({
   const [pendingStops, setPendingStops] = useState<Record<string, string>>({});
   const closeRecap = useCallback(() => setRecap(null), []);
   const [timer, setTimer] = useState<string | null>(null);
+  const [planner, setPlanner] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -226,6 +229,7 @@ export default function PlanningHub({
     planned = weekly
       .filter((s) => s.status !== "completed")
       .reduce((n, s) => n + s.planned_minutes, 0);
+  const capacity = weekCapacity(week, profile, timetable, sessions, goals);
   async function saveContent(id: string, intent?: string, actual?: string) {
     const r = await getSupabase()!.rpc("set_session_content", {
       p_id: id,
@@ -301,7 +305,7 @@ export default function PlanningHub({
           ))}
         </div>
       )}
-      {requestedPlan && visible && userId && (
+      {(requestedPlan || planner) && visible && userId && (
         <WeekPlanner
           week={week}
           profile={profile}
@@ -309,7 +313,10 @@ export default function PlanningHub({
           sessions={sessions}
           goals={goals}
           budgets={budgets}
-          onClose={onClosePlan}
+          onClose={() => {
+            setPlanner(false);
+            onClosePlan();
+          }}
           onSaved={async (w) => {
             setWeek(w);
             await reload();
@@ -323,24 +330,41 @@ export default function PlanningHub({
             <div>
               <span className="eyebrow">Ý ĐỊNH → THỰC TẾ</span>
               <h1>Tuần của bạn</h1>
-              <p className="muted">
-                Phân bổ giờ cho việc quan trọng. Ghi nhận sau mỗi phiên tập
-                trung.
+              <p className="muted week-meta">
+                {formatMinutes(capacity.available)} trống
+                <i className="meta-sep" />
+                {weekly.length} phiên đã đặt ({formatMinutes(planned)})
+                <i className="meta-sep" />
+                {formatMinutes(actual)} đã ghi
               </p>
             </div>
-            <div className="row-actions">
-              <button className="button secondary" onClick={() => onImport()}>
-                <Upload size={17} />
-                Nhập lịch
-              </button>
-              <button
-                className="button primary"
-                onClick={() => (userId ? setEdit("new") : onAuth())}
-              >
-                <Plus size={17} />
-                Thêm phiên
-              </button>
-            </div>
+            <SplitButton
+              label="Thêm phiên"
+              onClick={() => (userId ? setEdit("new") : onAuth())}
+              actions={[
+                {
+                  id: "plan",
+                  icon: Wand2,
+                  label: "Lập kế hoạch tuần",
+                  hint: "App xếp mục tiêu vào giờ trống",
+                  onSelect: () => (userId ? setPlanner(true) : onAuth()),
+                },
+                {
+                  id: "timetable",
+                  icon: CalendarDays,
+                  label: "Nhập thời khoá biểu…",
+                  hint: "Mỗi kỳ một lần",
+                  onSelect: () => onImport("timetable"),
+                },
+                {
+                  id: "sessions",
+                  icon: Upload,
+                  label: "Nhập phiên từ file…",
+                  hint: "Nếu bạn tự lên lịch bằng AI",
+                  onSelect: () => onImport(),
+                },
+              ]}
+            />
           </div>
           {setupGuide}
           <div className="week-nav">
@@ -381,22 +405,6 @@ export default function PlanningHub({
               {notice}
             </p>
           )}
-          <div className="planning-summary">
-            <div>
-              <span>Đã dành ra</span>
-              <strong>{formatMinutes(actual)}</strong>
-            </div>
-            <div>
-              <span>Phiên dự định trong tuần</span>
-              <strong>{formatMinutes(planned)}</strong>
-            </div>
-            <div>
-              <span>Ngày có hoạt động</span>
-              <strong>
-                {new Set(work.map((a) => a.occurred_on)).size} / 7
-              </strong>
-            </div>
-          </div>
           <Timetable
             week={week}
             setWeek={setWeek}
@@ -405,7 +413,6 @@ export default function PlanningHub({
             entries={timetable}
             sessions={sessions}
             goals={goals}
-            budgets={budgets}
             onImport={() => onImport("timetable")}
             onAuth={onAuth}
             onChanged={reload}

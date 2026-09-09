@@ -42,7 +42,6 @@ export default function Timetable({
   entries,
   sessions,
   goals,
-  budgets,
   onImport,
   onAuth,
   onChanged,
@@ -59,7 +58,6 @@ export default function Timetable({
   entries: TimetableEntry[];
   sessions: FocusSession[];
   goals: Goal[];
-  budgets: WeeklyBudget[];
   onImport: () => void;
   onAuth: () => void;
   onChanged: () => Promise<void>;
@@ -69,9 +67,7 @@ export default function Timetable({
   onCreate: (day: string, time: string) => void;
   onIntent: (id: string, intent: string) => Promise<void>;
 }) {
-  const [edit, setEdit] = useState<TimetableEntry | "new" | null>(null),
-    [planner, setPlanner] = useState(false),
-    [error, setError] = useState("");
+  const [edit, setEdit] = useState<TimetableEntry | "new" | null>(null);
   const capacity = weekCapacity(week, profile, entries, sessions, goals);
   return (
     <section className="timetable-section">
@@ -91,32 +87,8 @@ export default function Timetable({
             <Plus size={16} />
             Thêm lịch cố định
           </button>
-          <button
-            className="button primary"
-            onClick={() => (userId ? setPlanner(true) : onAuth())}
-          >
-            Lập kế hoạch tuần
-          </button>
         </div>
       </div>
-      <div className="capacity-line">
-        <span>
-          Giờ thức <b>{formatMinutes(capacity.awake)}</b>
-        </span>
-        <span>
-          TKB/việc cố định <b>{formatMinutes(capacity.fixed)}</b>
-        </span>
-        <span>
-          Giữ cho đợt thi <b>{formatMinutes(capacity.reserved)}</b>
-        </span>
-        <span>
-          Còn có thể phân bổ <b>{formatMinutes(capacity.available)}</b>
-        </span>
-      </div>
-      <p className="muted small">
-        Khoảng trắng trên lịch là giờ chưa có lịch. Quỹ còn phân bổ ở trên đã
-        trừ phần dự trữ cho đợt thi.
-      </p>
       {capacity.exams.length > 0 && (
         <p className="import-warning">
           Tuần có {capacity.exams.map((g) => g.title).join(", ")}. Đã giữ lại{" "}
@@ -124,7 +96,12 @@ export default function Timetable({
           tế vẫn cần log riêng.
         </p>
       )}
-      <WeekGoalLegend week={week} goals={goals} sessions={sessions} activities={activities}/>
+      <WeekGoalLegend
+        week={week}
+        goals={goals}
+        sessions={sessions}
+        activities={activities}
+      />
       <WeekHourGrid
         key={week}
         week={week}
@@ -161,11 +138,6 @@ export default function Timetable({
           Nhập TKB từ file / dán bảng
         </button>
       </div>
-      {error && (
-        <p role="alert" className="form-error">
-          {error}
-        </p>
-      )}
       {edit && (
         <TimetableForm
           entry={edit === "new" ? undefined : edit}
@@ -197,22 +169,6 @@ export default function Timetable({
           }}
         />
       )}
-      {planner && (
-        <WeekPlanner
-          week={week}
-          profile={profile}
-          entries={entries}
-          sessions={sessions}
-          goals={goals}
-          budgets={budgets}
-          onClose={() => setPlanner(false)}
-          onSaved={async (w) => {
-            setWeek(w);
-            await onChanged();
-            setError("");
-          }}
-        />
-      )}
     </section>
   );
 }
@@ -233,8 +189,7 @@ export function TimetableForm({
   onDelete: (id: string) => Promise<void>;
 }) {
   const semesters = journeySemesters(profile),
-    current =
-      setupTerm(profile, todayKey());
+    current = setupTerm(profile, todayKey());
   const [allDay, setAllDay] = useState(entry?.all_day || false);
   const [weekdays, setWeekdays] = useState<number[]>([entry?.weekday ?? 0]);
   const [from, setFrom] = useState(entry?.valid_from || current.start),

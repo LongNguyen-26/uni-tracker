@@ -54,7 +54,6 @@
   background: var(--surface);
   border: 1px solid #dfe7e2;
   border-radius: 20px;
-  overflow: hidden;
   box-shadow: 0 8px 35px #173d2410;
 }
 .setup-card > header {
@@ -195,6 +194,7 @@
 }
 .setup-card-footer {
   border-top: 1px solid var(--line);
+  border-radius: 0 0 20px 20px;
   padding: 20px 36px;
   display: flex;
   justify-content: space-between;

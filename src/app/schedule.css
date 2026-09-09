@@ -7,8 +7,11 @@
   min-width: 0 !important;
   width: 100%;
 }
-.heatmap {
-  gap: 2px;
+.heatmap-inner {
+  --axis-gap: 2px;
+}
+.zoomed .heatmap-inner {
+  --axis-gap: 3px;
 }
 .day-slot {
   aspect-ratio: 1;
@@ -152,24 +155,6 @@
 .timetable-section {
   margin: 24px 0;
 }
-.capacity-line {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 12px 0 18px;
-}
-.capacity-line > span {
-  font-size: 11px;
-  background: #fff;
-  border: 1px solid #e2e8dd;
-  padding: 10px;
-  border-radius: 7px;
-}
-.capacity-line b {
-  display: block;
-  font-size: 15px;
-  margin-top: 5px;
-}
 .week-board {
   display: grid;
   grid-template-columns: repeat(7, minmax(90px, 1fr));
@@ -283,9 +268,7 @@
 .row-actions {
   flex-wrap: wrap;
 }
-.zoomed .heatmap {
-  gap: 3px;
-}
+
 .zoomed .day-cell {
   border-radius: 3px;
   min-height: 0;
@@ -330,10 +313,12 @@
   }
   .month-labels {
     font-size: 8px;
-    gap: 1px;
   }
-  .zoomed .heatmap {
-    gap: 1.5px;
+  .heatmap-inner {
+    --axis-gap: 1px;
+  }
+  .zoomed .heatmap-inner {
+    --axis-gap: 1.5px;
   }
   .zoomed .weekday-labels {
     font-size: 8px;
