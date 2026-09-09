@@ -655,3 +655,133 @@
     max-width: 160px;
   }
 }
+.setup-guide {
+  margin: 0 0 24px;
+  border: 1px solid #dce5df;
+  border-radius: 14px;
+  background: white;
+  padding: 20px 24px 6px;
+}
+.setup-guide-new {
+  background: #f0f7f2;
+  border-color: #c3ddcc;
+}
+.setup-guide header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  padding-bottom: 14px;
+}
+.setup-guide header h2 {
+  font-size: 16px;
+  line-height: 1.6;
+}
+.setup-guide header p {
+  font-size: 13px;
+  color: #526459;
+  margin-top: 3px;
+}
+.setup-guide header .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+}
+.setup-guide-progress {
+  font-size: 14px;
+  color: var(--green-dark);
+  font-weight: 600;
+  flex-shrink: 0;
+  padding-top: 3px;
+}
+.setup-guide ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.setup-guide li {
+  border-top: 1px solid #dce5df;
+  padding: 15px 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.setup-guide-check {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid #92a89a;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+}
+.setup-guide .is-done .setup-guide-check {
+  border-color: var(--green);
+  color: var(--green);
+  border-radius: 50%;
+}
+.setup-guide-copy {
+  flex: 1;
+  min-width: 0;
+}
+.setup-guide-copy h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.setup-guide-copy h3 span,
+.setup-guide .is-done h3 {
+  font-weight: 400;
+}
+.setup-guide-copy p {
+  font-size: 13px;
+  color: #596b60;
+  margin-top: 2px;
+}
+.setup-guide li > button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.setup-guide .is-done > button {
+  font-size: 13px;
+  color: #63796b;
+}
+.setup-guide-complete {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #dce5df;
+  border-radius: 12px;
+  padding: 16px 22px;
+  background: white;
+  margin-bottom: 24px;
+  font-size: 14px;
+  color: #506759;
+}
+.setup-guide-complete p {
+  flex: 1;
+}
+.setup-guide-complete > svg {
+  color: var(--green);
+}
+@media (max-width: 620px) {
+  .setup-guide {
+    padding: 16px 16px 3px;
+  }
+  .setup-guide li {
+    flex-wrap: wrap;
+    gap: 8px 10px;
+  }
+  .setup-guide-copy {
+    flex-basis: calc(100% - 32px);
+  }
+  .setup-guide li > button {
+    margin-left: 28px;
+  }
+  .setup-guide-complete {
+    align-items: flex-start;
+    padding: 14px 16px;
+  }
+}

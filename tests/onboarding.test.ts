@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { demoData } from "../src/lib/timeline";
-import { setupJourney, setupTerm, setupWeek } from "../src/lib/onboarding";
+import {
+  setupJourney,
+  setupTerm,
+  setupWeek,
+  setupGuidance,
+} from "../src/lib/onboarding";
 import { journeySemesters } from "../src/lib/schedule";
 import { validateSemesterSettings } from "../src/lib/planning";
 import { aiImportPrompt, importTemplate } from "../src/lib/import-guide";
@@ -79,4 +84,38 @@ test("separate and combined AI templates parse valid linked groups without phant
       assert.equal(importPayload(rows).length, 4);
     }
   }
+});
+
+test("contextual guidance prioritizes the current page at zero, then the missing prerequisite", () => {
+  assert.equal(
+    setupGuidance({ timetable: 0, goals: 0, activities: 0 }, "planning").next,
+    "timetable",
+  );
+  assert.equal(
+    setupGuidance({ timetable: 0, goals: 0, activities: 0 }, "goals").next,
+    "goals",
+  );
+  const timetableOnly = setupGuidance(
+    { timetable: 18, goals: 0, activities: 0 },
+    "planning",
+  );
+  assert.equal(timetableOnly.done, 1);
+  assert.equal(timetableOnly.next, "goals");
+  assert.equal(timetableOnly.canPlan, false);
+  const goalsOnly = setupGuidance(
+    { timetable: 0, goals: 6, activities: 0 },
+    "goals",
+  );
+  assert.equal(goalsOnly.next, "timetable");
+  assert.notEqual(goalsOnly.title, timetableOnly.title);
+  const ready = setupGuidance(
+    { timetable: 18, goals: 6, activities: 0 },
+    "planning",
+  );
+  assert.equal(ready.canPlan, true);
+  assert.equal(ready.next, "activities");
+  assert.equal(
+    setupGuidance({ timetable: 18, goals: 6, activities: 23 }, "goals").done,
+    3,
+  );
 });

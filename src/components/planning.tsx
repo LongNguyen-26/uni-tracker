@@ -1,5 +1,11 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -15,9 +21,7 @@ import { ActivityForm } from "./forms";
 import Dialog from "./dialog";
 import DatePicker from "./date-picker";
 import SessionEditor from "./session-editor";
-import ImportHelp from "./import-help";
-import { journeySemesters } from "@/lib/schedule";
-import Timetable from "./timetable";
+import Timetable, { WeekPlanner } from "./timetable";
 import type { TimetableEntry } from "@/lib/schedule";
 import { getSupabase } from "@/lib/supabase";
 import { errorMessage } from "@/lib/errors";
@@ -74,6 +78,10 @@ export default function PlanningHub({
   onSessionsChange,
   requestedSession,
   onCloseRequested,
+  setupGuide,
+  onTimetableChange,
+  requestedPlan,
+  onClosePlan,
 }: {
   visible: boolean;
   userId?: string;
@@ -86,6 +94,10 @@ export default function PlanningHub({
   onSessionsChange: (sessions: FocusSession[]) => void;
   requestedSession: string | null;
   onCloseRequested: () => void;
+  setupGuide?: ReactNode;
+  onTimetableChange: (entries: TimetableEntry[]) => void;
+  requestedPlan: boolean;
+  onClosePlan: () => void;
 }) {
   const [sessions, setSessions] = useState<FocusSession[]>([]);
   const [budgets, setBudgets] = useState<WeeklyBudget[]>([]);
@@ -129,11 +141,12 @@ export default function PlanningHub({
       );
       setBudgets(b);
       setTimetable(t);
+      onTimetableChange(t);
       setError("");
     } catch (e) {
       setError(errorMessage(e));
     }
-  }, [userId]);
+  }, [userId, onTimetableChange]);
   useEffect(() => {
     const initial = window.setTimeout(() => void reload(), 0);
     return () => {
@@ -288,6 +301,22 @@ export default function PlanningHub({
           ))}
         </div>
       )}
+      {requestedPlan && visible && userId && (
+        <WeekPlanner
+          week={week}
+          profile={profile}
+          entries={timetable}
+          sessions={sessions}
+          goals={goals}
+          budgets={budgets}
+          onClose={onClosePlan}
+          onSaved={async (w) => {
+            setWeek(w);
+            await reload();
+            await onChanged();
+          }}
+        />
+      )}
       {visible && (
         <div className="planning-page">
           <div className="section-heading">
@@ -313,30 +342,7 @@ export default function PlanningHub({
               </button>
             </div>
           </div>
-          {userId && (!goals.length || !timetable.length) && (
-            <details
-              className="import-help"
-              open={!goals.length && !sessions.length}
-            >
-              <summary>Chuẩn bị tuần của bạn</summary>
-              <p>
-                {!timetable.length
-                  ? "Bạn có thể nhập TKB trước để thấy khoảng trống. Nếu không có lịch cố định, thêm mục tiêu rồi đặt phiên bất cứ lúc nào."
-                  : "Thêm mục tiêu để phân bổ thời gian theo điều bạn muốn đạt."}
-              </p>
-              <ImportHelp
-                day={todayKey()}
-                termEnd={
-                  journeySemesters(profile).find(
-                    (s) => s.start <= todayKey() && s.end >= todayKey(),
-                  )?.end || todayKey()
-                }
-              />
-              <button className="button" onClick={() => onImport("timetable")}>
-                Nhập thời khóa biểu
-              </button>
-            </details>
-          )}
+          {setupGuide}
           <div className="week-nav">
             <button
               className="icon-button"

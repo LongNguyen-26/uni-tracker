@@ -347,22 +347,25 @@ export default function ImportDialog({
       if (!prepared.length)
         throw new Error("Không tìm thấy dòng nào trong khoảng đã chọn.");
       setRows(prepared);
-      setOpened([
+      const reviewGroup = (row: ImportRow) =>
+        ["budget", "milestone"].includes(row.kind)
+          ? "goal"
+          : row.kind === "activity"
+            ? "session"
+            : row.kind;
+      const problemGroups = [
         ...new Set(
           prepared
             .filter(
               (r) =>
                 r.selected && validateImportRow(r, goals, prepared, todayKey()),
             )
-            .map((r) =>
-              ["budget", "milestone"].includes(r.kind)
-                ? "goal"
-                : r.kind === "activity"
-                  ? "session"
-                  : r.kind,
-            ),
+            .map(reviewGroup),
         ),
-      ]);
+      ];
+      setOpened(
+        problemGroups.length ? problemGroups : [reviewGroup(prepared[0])],
+      );
       setBatch(crypto.randomUUID());
       scrollTop();
     } catch (e) {
@@ -712,16 +715,6 @@ export default function ImportDialog({
             <p className="muted small">
               Mục tiêu được tạo trước, tiếp theo là việc/cột mốc rồi lịch và
               hoạt động. Chỉ các dòng hợp lệ, đang chọn sẽ được nhập.
-            </p>
-            <p className="muted small">
-              {
-                rows.filter((r) =>
-                  context === "goals"
-                    ? !["goal", "milestone", "budget"].includes(r.kind)
-                    : ["goal", "milestone"].includes(r.kind),
-                ).length
-              }{" "}
-              dòng thuộc nhóm khác cũng được giữ để bạn đối chiếu.
             </p>
             {invalid.length > 0 && (
               <div className="import-warning" role="alert">

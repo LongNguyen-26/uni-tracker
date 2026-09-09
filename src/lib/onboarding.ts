@@ -75,3 +75,31 @@ export function setupWeek(term: SemesterSettings, day: string) {
     day < term.start ? term.start : day > term.end ? term.start : day,
   );
 }
+export type SetupCounts = Record<SetupPart, number>;
+export function setupGuidance(counts: SetupCounts, page: "goals" | "planning") {
+  const order: SetupPart[] =
+    page === "goals"
+      ? ["goals", "timetable", "activities"]
+      : ["timetable", "goals", "activities"];
+  const done = order.filter((key) => counts[key] > 0).length;
+  const next = order.find((key) => !counts[key]);
+  const title =
+    done === 0
+      ? "UniTracker cần ba thứ để xếp giờ cho bạn"
+      : done === 3
+        ? "Đã đủ ba phần để bắt đầu"
+        : !counts.goals && counts.timetable
+          ? "Đã có giờ trống. Thêm mục tiêu để biết dùng vào đâu."
+          : !counts.timetable && counts.goals
+            ? "Đã có mục tiêu. Thêm thời khóa biểu để tìm giờ trống."
+            : !counts.activities
+              ? "Lịch và mục tiêu đã sẵn sàng. Giờ xếp kế hoạch tự học."
+              : "Bổ sung lịch và mục tiêu để hoàn thiện tuần của bạn.";
+  return {
+    order,
+    done,
+    next,
+    title,
+    canPlan: counts.goals > 0 && counts.timetable > 0,
+  };
+}

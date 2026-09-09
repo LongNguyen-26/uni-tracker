@@ -48,6 +48,9 @@ import { ActivityForm, AuthForm, errorMessage } from "./forms";
 import Dialog from "./dialog";
 import { GoalForm, SettingsForm } from "./journey-forms";
 import PlanningHub from "./planning";
+import SetupGuide from "./setup-guide";
+import { TimetableForm } from "./timetable";
+import type { SetupPart } from "@/lib/onboarding";
 import dynamic from "next/dynamic";
 const ImportDialog = dynamic(() => import("./import-dialog"));
 const Preparation = dynamic(() => import("./preparation"));
@@ -64,6 +67,7 @@ import {
   dayVisual,
   indexSessionsByDay,
   parseCalendarPreset,
+  type TimetableEntry,
 } from "@/lib/schedule";
 import SessionEditor from "./session-editor";
 import JourneyToolbar from "./journey-toolbar";
@@ -84,7 +88,7 @@ import {
 
 type View = "timeline" | "goals" | "journal" | "planning";
 type Modal =
-  | { kind: "auth" | "recovery" | "settings" | "prepare" }
+  | { kind: "auth" | "recovery" | "settings" | "prepare" | "timetable" }
   | { kind: "import"; initialKind?: "timetable"; context?: ImportContext }
   | { kind: "session"; date?: string }
   | { kind: "goal"; goal?: Goal; date?: string }
@@ -450,6 +454,18 @@ export default function Tracker() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [sessions, setSessions] = useState<FocusSession[]>([]);
+  const [setupSchedule, setSetupSchedule] = useState<{
+    userId: string;
+    entries: TimetableEntry[];
+  } | null>(null);
+  const [planRequest, setPlanRequest] = useState(false);
+  const accountId = user?.id;
+  const receiveTimetable = useCallback(
+    (entries: TimetableEntry[]) => {
+      if (accountId) setSetupSchedule({ userId: accountId, entries });
+    },
+    [accountId],
+  );
   const [sessionRequest, setSessionRequest] = useState<string | null>(null);
   const [journalGoal, setJournalGoal] = useState("all");
   const [preset, setPreset] = useState<Partial<Profile> | null>(null);
@@ -553,7 +569,9 @@ export default function Tracker() {
       );
       setActivities(allActivities);
       if (!savedProfile && (allGoals.length || allActivities.length))
-        setModal((previous) => previous?.kind === "recovery" ? previous : { kind: "settings" });
+        setModal((previous) =>
+          previous?.kind === "recovery" ? previous : { kind: "settings" },
+        );
     } catch (error) {
       if (requestVersion === version.current.value)
         setLoadError(errorMessage(error));
@@ -587,6 +605,9 @@ export default function Tracker() {
           setProfile(null);
           setGoals([]);
           setActivities([]);
+          setSessions([]);
+          setSetupSchedule(null);
+          setPlanRequest(false);
           void loadData(currentUser);
         }
       } else {
@@ -709,6 +730,25 @@ export default function Tracker() {
     setQuery("");
     setMobileNav(false);
     setSemesterFilter("all");
+  }
+  function openSetupPart(part: SetupPart | "all") {
+    const destination = part === "goals" ? "goals" : "planning";
+    navigate(destination);
+    if (destination === "goals") {
+      setStatusFilter("all");
+      setCategoryFilter("all");
+    }
+    if (part === "activities") {
+      setModal(null);
+      setPlanRequest(true);
+    } else {
+      setPlanRequest(false);
+      setModal({
+        kind: "import",
+        context: part,
+        initialKind: part === "timetable" ? "timetable" : undefined,
+      });
+    }
   }
   function openWrite(next: Modal) {
     setModal(user ? next : { kind: "auth" });
@@ -973,14 +1013,47 @@ export default function Tracker() {
       )
     : [];
 
-  if (profile && user && !loading && !loadError && modal?.kind !== "recovery" &&
-      (!profile.preparation_done || modal?.kind === "prepare")) {
-    return <Preparation key={user.id} profile={profile} goals={goals} activities={activities}
-      onSave={saveProfile} onSaveGoal={saveGoal} onReload={() => loadData(user)}
-      onFinish={async () => {
-        await saveProfile({ ...profile, preparation_done: true });
-        setModal(null); setView("planning");
-      }}/>;
+  const setupGuide =
+    user &&
+    setupSchedule?.userId === user.id &&
+    (view === "goals" || view === "planning") ? (
+      <SetupGuide
+        key={user.id}
+        userId={user.id}
+        page={view}
+        counts={{
+          timetable: setupSchedule.entries.length,
+          goals: goals.length,
+          activities: sessions.length,
+        }}
+        onOpen={openSetupPart}
+      />
+    ) : null;
+
+  if (
+    profile &&
+    user &&
+    !loading &&
+    !loadError &&
+    modal?.kind !== "recovery" &&
+    (!profile.preparation_done || modal?.kind === "prepare")
+  ) {
+    return (
+      <Preparation
+        key={user.id}
+        profile={profile}
+        goals={goals}
+        activities={activities}
+        onSave={saveProfile}
+        onSaveGoal={saveGoal}
+        onReload={() => loadData(user)}
+        onFinish={async () => {
+          await saveProfile({ ...profile, preparation_done: true });
+          setModal(null);
+          setView("planning");
+        }}
+      />
+    );
   }
 
   return (
@@ -1035,8 +1108,11 @@ export default function Tracker() {
           </div>
         </div>
         <div className="sidebar-bottom">
-          <button className="nav-item" onClick={() => openWrite({ kind: "prepare" })}>
-            <Settings2 size={18}/> Thiết lập ban đầu
+          <button
+            className="nav-item"
+            onClick={() => openWrite({ kind: "prepare" })}
+          >
+            <Settings2 size={18} /> Thiết lập ban đầu
           </button>
           <button
             className="nav-item"
@@ -1266,6 +1342,7 @@ export default function Tracker() {
           ) : (
             profile && (
               <>
+                {view === "goals" && setupGuide}
                 <div className="stats-grid" hidden={view === "planning"}>
                   <div className="stat-card">
                     <span className="stat-icon">
@@ -1868,6 +1945,10 @@ export default function Tracker() {
               key={user?.id || "demo"}
               visible={view === "planning"}
               onSessionsChange={receiveSessions}
+              onTimetableChange={receiveTimetable}
+              setupGuide={setupGuide}
+              requestedPlan={planRequest}
+              onClosePlan={() => setPlanRequest(false)}
               requestedSession={sessionRequest}
               onCloseRequested={() => setSessionRequest(null)}
               userId={user?.id}
@@ -1877,7 +1958,16 @@ export default function Tracker() {
               onAuth={() => setModal({ kind: "auth" })}
               onImport={(initialKind) =>
                 setModal(
-                  user ? { kind: "import", initialKind } : { kind: "auth" },
+                  user
+                    ? {
+                        kind: "import",
+                        initialKind,
+                        context:
+                          initialKind === "timetable"
+                            ? "timetable"
+                            : "schedule",
+                      }
+                    : { kind: "auth" },
                 )
               }
               onChanged={async () => {
@@ -1976,9 +2066,38 @@ export default function Tracker() {
           activities={activities}
           profile={profile}
           onClose={() => setModal(null)}
-          onImported={async () => {
+          completionLabel={
+            view === "goals" ? "Xem mục tiêu đã nhập" : "Trở về lịch tuần"
+          }
+          onManual={
+            modal.context === "goals"
+              ? () => setModal({ kind: "goal" })
+              : modal.context === "timetable"
+                ? () => setModal({ kind: "timetable" })
+                : undefined
+          }
+          onImported={() => loadData(user)}
+        />
+      )}
+      {modal?.kind === "timetable" && profile && user && (
+        <TimetableForm
+          profile={profile}
+          goals={goals}
+          onClose={() => setModal(null)}
+          onSave={async (data) => {
+            const r = await getSupabase()!
+              .from("timetable_entries")
+              .insert(data.map((row) => ({ ...row, user_id: user.id })));
+            if (r.error) throw r.error;
             await loadData(user);
-            setView("planning");
+          }}
+          onDelete={async (id) => {
+            const r = await getSupabase()!
+              .from("timetable_entries")
+              .delete()
+              .eq("id", id);
+            if (r.error) throw r.error;
+            await loadData(user);
           }}
         />
       )}
