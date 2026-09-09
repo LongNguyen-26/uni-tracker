@@ -773,3 +773,40 @@
   align-items: center;
   flex-wrap: wrap;
 }
+.timer-modes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.timer-modes button {
+  padding: 7px 12px;
+  border: 1px solid #dce4d8;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: #41513f;
+}
+.timer-modes button.selected {
+  border-color: #9dc4ea;
+  background: #e8f1fa;
+  color: #1f4b74;
+  font-weight: 600;
+}
+.timer-modes input {
+  width: 84px;
+  padding: 7px 9px;
+  font-size: 0.8125rem;
+}
+.timer-hint {
+  margin-bottom: 12px;
+}
+/* Past the target the number is the only thing that needs to change tone. */
+.countdown.overtime {
+  color: #b4531f;
+}
+.start-now .timer-surface {
+  margin-top: 4px;
+}

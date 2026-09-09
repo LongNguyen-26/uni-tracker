@@ -606,6 +606,22 @@ export default function Preparation({
                   if (activity) setPanel({ kind: "activity", activity });
                 }
               }}
+              onMenu={(e) => {
+                if (e.type === "fixed")
+                  setPanel({
+                    kind: "timetable",
+                    entry: entries.find((x) => x.id === e.id),
+                  });
+                else if (e.type === "session")
+                  setPanel({
+                    kind: "session",
+                    session: sessions.find((x) => x.id === e.id),
+                  });
+                else {
+                  const activity = activities.find((x) => x.id === e.id);
+                  if (activity) setPanel({ kind: "activity", activity });
+                }
+              }}
               onCreate={(day, time) =>
                 setPanel(
                   goals.length

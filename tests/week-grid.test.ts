@@ -110,3 +110,35 @@ test("midnight actual timer segments appear once and replace the completed inten
     [["2026-09-09", 870, 880]],
   );
 });
+test("a session started on the spot occupies the hour it is being worked", () => {
+  const { goals } = demoData("2026-09-06");
+  // What StartNow writes: a real slot from "now", never the unscheduled tray.
+  const live = {
+    id: "live",
+    goal_id: goals[0].id,
+    title: "Đọc paper",
+    intent: "Đọc paper",
+    status: "running",
+    is_unscheduled: false,
+    planned_minutes: 60,
+    elapsed_seconds: 0,
+    scheduled_start: "2026-09-09T14:30:00",
+    scheduled_end: "2026-09-09T15:30:00",
+    segments: [],
+  } as unknown as FocusSession;
+  const [cell, ...rest] = weekEvents("2026-09-07", goals, [], [live], []);
+  assert.equal(rest.length, 0);
+  assert.equal(cell.type, "session");
+  assert.equal(cell.unscheduled, undefined);
+  assert.deepEqual([cell.day, cell.start, cell.end], ["2026-09-09", 870, 930]);
+  assert.equal(cell.color, goals[0].color);
+  // An unscheduled one still belongs in the tray rather than on the hour axis.
+  const tray = weekEvents(
+    "2026-09-07",
+    goals,
+    [],
+    [{ ...live, is_unscheduled: true }],
+    [],
+  );
+  assert.equal(tray[0].unscheduled, true);
+});

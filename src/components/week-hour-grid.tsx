@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   addDays,
   formatDate,
@@ -8,7 +8,8 @@ import {
   type Goal,
   type Profile,
 } from "@/lib/timeline";
-import { type FocusSession } from "@/lib/planning";
+import { sessionElapsed, type FocusSession } from "@/lib/planning";
+import { shortClock } from "@/lib/timer";
 import { minuteClock, type TimetableEntry } from "@/lib/schedule";
 import {
   weekEvents,
@@ -19,6 +20,7 @@ import {
   type WeekEvent,
 } from "@/lib/week-grid";
 import { formatMinutes } from "@/lib/focus";
+import { MoreHorizontal } from "lucide-react";
 
 export default function WeekHourGrid({
   week,
@@ -28,6 +30,7 @@ export default function WeekHourGrid({
   sessions,
   activities,
   onOpen,
+  onMenu,
   onCreate,
   onIntent,
 }: {
@@ -38,6 +41,7 @@ export default function WeekHourGrid({
   sessions: FocusSession[];
   activities: Activity[];
   onOpen: (event: WeekEvent) => void;
+  onMenu: (event: WeekEvent) => void;
   onCreate: (day: string, time: string) => void;
   onIntent: (id: string, intent: string) => Promise<void>;
 }) {
@@ -45,6 +49,13 @@ export default function WeekHourGrid({
     [outside, setOutside] = useState(false);
   const [editing, setEditing] = useState<string | null>(null),
     [error, setError] = useState("");
+  const running = sessions.find((s) => s.status === "running");
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!running) return;
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [running]);
   const days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
   const events = useMemo(
     () => weekEvents(week, goals, entries, sessions, activities),
@@ -210,7 +221,7 @@ export default function WeekHourGrid({
                         : undefined;
                     return (
                       <div
-                        className={`hour-event ${e.planned ? "planned" : "done"} ${eventHeight < 35 ? "compact" : ""}`}
+                        className={`hour-event ${e.planned ? "planned" : "done"} ${eventHeight < 35 ? "compact" : ""} ${s?.status === "running" ? "running" : ""}`}
                         key={e.key}
                         style={
                           {
@@ -226,15 +237,36 @@ export default function WeekHourGrid({
                           className="hour-event-main"
                           onClick={() => onOpen(e)}
                           title={`${e.title} · ${minuteClock(Math.floor(e.start))}–${minuteClock(Math.floor(e.end))} · ${formatMinutes(e.end - e.start)}`}
-                          aria-label={`${e.title}, ${day}, ${minuteClock(Math.floor(e.start))} đến ${minuteClock(Math.floor(e.end))}`}
+                          aria-label={
+                            s?.status === "running"
+                              ? `${e.title}, đang chạy ${shortClock(sessionElapsed(s, now))}, mở đồng hồ`
+                              : `${e.title}, ${day}, ${minuteClock(Math.floor(e.start))} đến ${minuteClock(Math.floor(e.end))}`
+                          }
                         >
                           <strong>{e.title}</strong>
-                          {eventHeight >= 35 && (
-                            <small>
-                              {minuteClock(Math.floor(e.start))}–
-                              {minuteClock(Math.floor(e.end))}
+                          {s?.status === "running" ? (
+                            <small className="hour-running">
+                              <i className="running-dot" aria-hidden="true" />
+                              {shortClock(sessionElapsed(s, now))}
                             </small>
+                          ) : (
+                            eventHeight >= 35 && (
+                              <small>
+                                {minuteClock(Math.floor(e.start))}–
+                                {minuteClock(Math.floor(e.end))}
+                              </small>
+                            )
                           )}
+                        </button>
+                        <button
+                          className="hour-event-menu"
+                          aria-label={`Tùy chọn cho ${e.title}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onMenu(e);
+                          }}
+                        >
+                          <MoreHorizontal size={14} />
                         </button>
                         {s &&
                           !s.intent &&

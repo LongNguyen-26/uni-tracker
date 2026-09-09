@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import SessionRecap from "./session-recap";
 import SplitButton from "./split-button";
+import StartNow from "./start-now";
 import { ActivityForm } from "./forms";
 import Dialog from "./dialog";
 import DatePicker from "./date-picker";
@@ -36,6 +37,15 @@ import {
   type Profile,
 } from "@/lib/timeline";
 import { formatMinutes, isWork } from "@/lib/focus";
+import {
+  COUNTDOWN_PRESETS,
+  parseMemory,
+  rememberChoice,
+  shortClock,
+  timerMode,
+  timerReading,
+  type TimerMode,
+} from "@/lib/timer";
 import {
   clockText,
   localDateTime,
@@ -117,8 +127,27 @@ export default function PlanningHub({
     [dailyContent, setDailyContent] = useState(false);
   const [pendingStops, setPendingStops] = useState<Record<string, string>>({});
   const closeRecap = useCallback(() => setRecap(null), []);
-  const [timer, setTimer] = useState<string | null>(null);
+  const [timer, setTimer] = useState<{ id: string; instant?: boolean } | null>(
+    null,
+  );
+  const [startNow, setStartNow] = useState(false);
   const [planner, setPlanner] = useState(false);
+  // The learned default is read once when a timer opens, so it needs no state.
+  const timerKey = "unitracker:timer:" + userId;
+  const learnMode = useCallback(
+    (mode: TimerMode) => {
+      try {
+        const next = rememberChoice(
+          parseMemory(localStorage.getItem(timerKey)),
+          mode,
+        );
+        localStorage.setItem(timerKey, JSON.stringify(next));
+      } catch {
+        /* Remembering is best effort. */
+      }
+    },
+    [timerKey],
+  );
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -157,7 +186,9 @@ export default function PlanningHub({
     };
   }, [reload, activities]);
   useEffect(() => onSessionsChange(sessions), [sessions, onSessionsChange]);
-  const selected = sessions.find((s) => s.id === (timer || requestedSession)),
+  const selected = sessions.find(
+      (s) => s.id === (timer?.id || requestedSession),
+    ),
     running = sessions.find((s) => s.status === "running");
   async function transition(id: string, action: string, notes?: string) {
     if (!userId) return;
@@ -252,7 +283,9 @@ export default function PlanningHub({
   );
   return (
     <>
-      {userId && !selected && (
+      {/* A running session lives in its own cell and in the sidebar chip, so the
+          bar stays out of the way and only offers a way in. */}
+      {userId && !selected && !running && (
         <div className="today-focus-bar">
           <span>
             <strong>Hôm nay</strong> ·{" "}
@@ -265,31 +298,31 @@ export default function PlanningHub({
             phiên đã đặt
           </span>
           {(() => {
-            const next =
-              running ||
-              sessions.find(
-                (s) =>
-                  localDateTime(s.scheduled_start).slice(0, 10) ===
-                    todayKey() && ["planned", "paused"].includes(s.status),
-              );
+            const next = sessions.find(
+              (s) =>
+                localDateTime(s.scheduled_start).slice(0, 10) === todayKey() &&
+                ["planned", "paused"].includes(s.status),
+            );
             return next ? (
               <button
                 className="button primary"
                 disabled={busy}
                 onClick={() => {
-                  setTimer(next.id);
+                  setTimer({ id: next.id });
                   if (next.status !== "running")
                     void transition(next.id, "start").catch(() => {});
                 }}
               >
                 <Play size={16} />
-                {next.status === "running"
-                  ? "Mở timer"
-                  : `Bắt đầu · ${next.title}`}
+                Bắt đầu · {next.title}
               </button>
             ) : (
-              <button className="text-button" onClick={() => setEdit("new")}>
-                Đặt một phiên
+              <button
+                className="button primary"
+                onClick={() => setStartNow(true)}
+              >
+                <Play size={16} />
+                Bắt đầu một phiên ngay
               </button>
             );
           })()}
@@ -299,11 +332,30 @@ export default function PlanningHub({
         <div className="form-error" role="alert">
           Thời gian đã dừng trên thiết bị, đang chờ máy chủ ghi.{" "}
           {Object.keys(pendingStops).map((id) => (
-            <button key={id} className="button" onClick={() => setTimer(id)}>
+            <button
+              key={id}
+              className="button"
+              onClick={() => setTimer({ id })}
+            >
               Mở để thử ghi lại
             </button>
           ))}
         </div>
+      )}
+      {startNow && userId && (
+        <StartNow
+          goals={goals}
+          userId={userId}
+          memoryKey={timerKey}
+          onMode={learnMode}
+          onClose={() => setStartNow(false)}
+          onStarted={async (id) => {
+            setStartNow(false);
+            await reload();
+            await onChanged();
+            setTimer({ id, instant: true });
+          }}
+        />
       )}
       {(requestedPlan || planner) && visible && userId && (
         <WeekPlanner
@@ -418,6 +470,7 @@ export default function PlanningHub({
             onChanged={reload}
             activities={activities}
             onSession={setDetail}
+            onTimer={(id) => setTimer({ id })}
             onActivity={(id) =>
               setActivityDetail(activities.find((a) => a.id === id))
             }
@@ -578,15 +631,6 @@ export default function PlanningHub({
                 Dời sang ngày khác
               </button>
               <button
-                className="button primary"
-                onClick={() => {
-                  setTimer(detailSession.id);
-                  setDetail(null);
-                }}
-              >
-                Mở timer
-              </button>
-              <button
                 className="button"
                 disabled={busy}
                 onClick={async () => {
@@ -718,6 +762,9 @@ export default function PlanningHub({
           stopAt={pendingStops[selected.id]}
           busy={busy}
           error={error}
+          memoryKey={timerKey}
+          instant={timer?.instant || selected.is_unscheduled || false}
+          onMode={learnMode}
           onClose={() => {
             setTimer(null);
             onCloseRequested();
@@ -754,6 +801,9 @@ function SessionTimer({
   stopAt,
   busy,
   error,
+  memoryKey,
+  instant,
+  onMode,
   onClose,
   onAction,
   onDiscard,
@@ -762,53 +812,127 @@ function SessionTimer({
   stopAt?: string;
   busy: boolean;
   error: string;
+  memoryKey: string;
+  instant: boolean;
+  onMode: (mode: TimerMode) => void;
   onClose: () => void;
   onAction: (a: string, notes?: string) => Promise<void>;
   onDiscard: () => Promise<void>;
 }) {
   const [now, setNow] = useState(() => Date.now()),
     [notes, setNotes] = useState(session.notes);
-  const stopped = useRef(false);
+  // Inferred once from context; the switch is there for when they want otherwise.
+  const [mode, setMode] = useState<TimerMode>(() => {
+    try {
+      return timerMode(
+        { planned_minutes: session.planned_minutes, instant },
+        parseMemory(localStorage.getItem(memoryKey)),
+      );
+    } catch {
+      return timerMode(
+        { planned_minutes: session.planned_minutes, instant },
+        null,
+      );
+    }
+  });
+  const [custom, setCustom] = useState(false);
   const surface = useRef<HTMLDivElement>(null);
-  const elapsed = sessionElapsed(session, stopAt ? Date.parse(stopAt) : now),
-    remaining = session.planned_minutes * 60 - elapsed;
+  const elapsed = sessionElapsed(session, stopAt ? Date.parse(stopAt) : now);
+  const reading = timerReading(mode, elapsed);
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
-  useEffect(() => {
-    if (
-      remaining === 0 &&
-      session.status === "running" &&
-      !stopped.current &&
-      !busy &&
-      !stopAt
-    ) {
-      stopped.current = true;
-      void onAction("stop").catch(() => {
-        stopped.current = true;
-      });
-    }
-  }, [remaining, session.status, busy, onAction, stopAt]);
+  function choose(next: TimerMode) {
+    setMode(next);
+    setCustom(
+      next.kind === "down" && !COUNTDOWN_PRESETS.includes(next.minutes as 25),
+    );
+    onMode(next);
+  }
+  const running = session.status === "running";
   return (
     <Dialog
-      title={session.title}
+      title={session.intent || session.title}
       description="Tập trung vào một việc, từng phiên một."
       onClose={onClose}
       wide
     >
-      <div className="timer-surface" ref={surface}>
-        <span className="eyebrow">{statusText[session.status]}</span>
-        <div
-          className="countdown"
-          role="timer"
-          aria-label={`Còn ${clockText(remaining)}`}
+      <div className="timer-modes" role="group" aria-label="Kiểu đồng hồ">
+        <button
+          className={mode.kind === "up" ? "selected" : ""}
+          aria-pressed={mode.kind === "up"}
+          onClick={() => choose({ kind: "up" })}
         >
-          {clockText(remaining)}
+          Đếm lên
+        </button>
+        <button
+          className={mode.kind === "down" ? "selected" : ""}
+          aria-pressed={mode.kind === "down"}
+          onClick={() =>
+            choose({ kind: "down", minutes: session.planned_minutes })
+          }
+        >
+          Đếm ngược
+        </button>
+        {mode.kind === "down" && (
+          <>
+            {COUNTDOWN_PRESETS.map((m) => (
+              <button
+                key={m}
+                className={!custom && mode.minutes === m ? "selected" : ""}
+                aria-pressed={!custom && mode.minutes === m}
+                onClick={() => choose({ kind: "down", minutes: m })}
+              >
+                {m} phút
+              </button>
+            ))}
+            <button
+              className={custom ? "selected" : ""}
+              aria-pressed={custom}
+              onClick={() => setCustom(true)}
+            >
+              Khác
+            </button>
+            {custom && (
+              <input
+                type="number"
+                min={1}
+                max={1440}
+                aria-label="Số phút đếm ngược"
+                value={mode.minutes}
+                onChange={(e) => {
+                  const m = Number(e.target.value);
+                  if (Number.isInteger(m) && m >= 1 && m <= 1440)
+                    choose({ kind: "down", minutes: m });
+                }}
+              />
+            )}
+          </>
+        )}
+      </div>
+      <p className="muted small timer-hint">
+        {mode.kind === "up"
+          ? "Chạy tới khi bạn dừng."
+          : "Hết giờ vẫn ghi tiếp nếu bạn chưa dừng."}
+      </p>
+      <div className="timer-surface" ref={surface}>
+        <span className="eyebrow">
+          {stopAt ? statusText[session.status] : reading.label}
+        </span>
+        <div
+          className={`countdown ${reading.overtime ? "overtime" : ""}`}
+          role="timer"
+          aria-label={`${reading.label} ${shortClock(reading.display)}`}
+        >
+          {mode.kind === "up"
+            ? clockText(reading.display)
+            : shortClock(reading.display)}
         </div>
         <p>
-          Thực làm {clockText(elapsed)} · dự kiến{" "}
-          {formatMinutes(session.planned_minutes)}
+          {mode.kind === "up"
+            ? `Dự kiến ${formatMinutes(session.planned_minutes)}`
+            : `thực làm ${shortClock(reading.elapsed)}`}
         </p>
         <div className="timer-actions">
           {!stopAt && ["planned", "paused"].includes(session.status) && (
@@ -821,7 +945,7 @@ function SessionTimer({
               {session.status === "paused" ? "Tiếp tục" : "Bắt đầu"}
             </button>
           )}
-          {!stopAt && session.status === "running" && (
+          {!stopAt && running && (
             <button
               className="button"
               disabled={busy}
@@ -833,12 +957,12 @@ function SessionTimer({
           )}
           {["running", "paused"].includes(session.status) && (
             <button
-              className="button"
+              className="button primary"
               disabled={busy}
               onClick={() => void onAction("stop").catch(() => {})}
             >
               <Square size={17} />
-              {stopAt ? "Thử ghi lại" : "Dừng & tự lưu"}
+              {stopAt ? "Thử ghi lại" : "Kết thúc"}
             </button>
           )}
           <button
@@ -862,8 +986,8 @@ function SessionTimer({
           )}
         </div>
         <small>
-          Đồng hồ vẫn chạy khi đóng cửa sổ, tối đa bằng thời lượng đã đặt. Tạm
-          dừng khi nghỉ.
+          Đồng hồ vẫn chạy khi đóng cửa sổ. Tạm dừng khi nghỉ; giờ vượt vẫn được
+          ghi lại.
         </small>
       </div>
       {session.status === "review" && (

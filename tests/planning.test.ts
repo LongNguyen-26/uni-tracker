@@ -85,7 +85,7 @@ test("numeric goals show meaningful units and project progress is derived from s
   assert.equal(calculatedProgress(project), 50);
   assert.equal(goalProgressText(project), "2/4 cột mốc");
 });
-test("timer is based on elapsed wall time, excludes paused time and caps at allotment", () => {
+test("timer is based on elapsed wall time, excludes paused time and runs past the plan", () => {
   const s = {
     status: "running",
     planned_minutes: 60,
@@ -100,7 +100,8 @@ test("timer is based on elapsed wall time, excludes paused time and caps at allo
     ),
     600,
   );
-  assert.equal(sessionElapsed(s, Date.parse("2026-09-07T04:00:00Z")), 3600);
+  // Three hours on a one-hour plan is three hours; the plan does not clamp it.
+  assert.equal(sessionElapsed(s, Date.parse("2026-09-07T04:00:00Z")), 11400);
   assert.equal(clockText(3600), "01:00:00");
   assert.equal(formatMinutes(1 / 6), "10 giây");
 });

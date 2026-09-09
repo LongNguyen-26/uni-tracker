@@ -46,6 +46,7 @@ export default function Timetable({
   onAuth,
   onChanged,
   onSession,
+  onTimer,
   activities,
   onActivity,
   onCreate,
@@ -62,6 +63,7 @@ export default function Timetable({
   onAuth: () => void;
   onChanged: () => Promise<void>;
   onSession: (id: string) => void;
+  onTimer: (id: string) => void;
   activities: Activity[];
   onActivity: (id: string) => void;
   onCreate: (day: string, time: string) => void;
@@ -113,6 +115,14 @@ export default function Timetable({
         onCreate={onCreate}
         onIntent={onIntent}
         onOpen={(e) => {
+          // A cell is a place to work, so it opens the clock; the rarer edits
+          // sit behind the corner menu.
+          if (e.type === "fixed")
+            setEdit(entries.find((x) => x.id === e.id) || null);
+          else if (e.type === "session") onTimer(e.id);
+          else onActivity(e.id);
+        }}
+        onMenu={(e) => {
           if (e.type === "fixed")
             setEdit(entries.find((x) => x.id === e.id) || null);
           else if (e.type === "session") onSession(e.id);

@@ -145,10 +145,8 @@ export function sessionElapsed(session: FocusSession, now = Date.now()) {
           Math.floor((now - new Date(session.running_since).getTime()) / 1000),
         )
       : 0;
-  return Math.min(
-    session.planned_minutes * 60,
-    session.elapsed_seconds + extra,
-  );
+  // No ceiling: a session that runs past its plan records the time it took.
+  return session.elapsed_seconds + extra;
 }
 export function clockText(seconds: number) {
   const s = Math.max(0, Math.floor(seconds));

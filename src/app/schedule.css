@@ -763,3 +763,53 @@
     right: 0;
   }
 }
+/* One state, one place: the cell that is running says so on its own. */
+.hour-event.running {
+  z-index: 5;
+}
+.hour-event.running .hour-event-main {
+  border-width: 2px;
+  border-left-width: 4px;
+  border-style: solid;
+  background: color-mix(in srgb, var(--event-color) 26%, white);
+  box-shadow: 0 3px 12px #1c392526;
+}
+.hour-running {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.hour-event.running .running-dot {
+  width: 6px;
+  height: 6px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--event-color) 30%, white);
+  background: var(--event-color);
+}
+.hour-event-menu {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  z-index: 3;
+  display: flex;
+  padding: 2px;
+  border: 0;
+  border-radius: 5px;
+  background: #ffffffd9;
+  color: #4c5b50;
+  opacity: 0;
+}
+.hour-event:hover .hour-event-menu,
+.hour-event:focus-within .hour-event-menu,
+.hour-event-menu:focus-visible {
+  opacity: 1;
+}
+@media (hover: none) {
+  .hour-event-menu {
+    opacity: 1;
+  }
+}
+.hour-event.compact .hour-event-menu {
+  top: 0;
+}
