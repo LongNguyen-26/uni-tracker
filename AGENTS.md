@@ -54,7 +54,7 @@ Production: https://uni-tracker-sigma.vercel.app · GitHub: https://github.com/L
 
 ### Known issues
 
-- The weekly summary labelled “Ý định trong tuần” reflects weekly goal budgets; imported activities without a weekly budget still appear in the schedule while that summary can remain zero. This existing label/summary distinction is non-blocking and was left for a separate change.
+- Resolved in release `b546fb9`: the weekly intention summary now counts planned session duration separately from weekly goal budgets. Imported planned activities no longer depend on having a budget to appear in that summary.
 
 ### Current product direction (user update after `803b160`)
 
@@ -92,3 +92,14 @@ Production: https://uni-tracker-sigma.vercel.app · GitHub: https://github.com/L
 - GitHub commit `b546fb9157661d5b04ca68dede143e682748636d` was pushed to `codex/hourly-week-autosave` and then `main`. Preview READY: `dpl_DBhXnXyNEJ2A6GTnrV5hkG7Ty1Lx`. One Preview flow verified cards at 07:00 and 14:30 had different vertical positions and proportional 60px/90px heights, then stopped a timer: one log, exactly 33 seconds and inherited intent. No browser errors or warnings. Disposable QA account and local credential/browser files removed after logout.
 - Production READY: `dpl_BUFcQa8dVgRz9Ee9YK1BXMyESZ62`, matching the full commit above, `uni-tracker-sigma.vercel.app` assigned, no alias error, HTTP 200 verified.
 - Remaining approved release 3: compact journey toolbar/multiselect legend, semester-relevant goals, first-three-visits help and estimated milestone date confirmation with reduced-motion-aware contraction.
+
+### Verified release `c2159c7` — 2026-09-09 (release 3 of 3)
+
+- Combined journey title/year range, journey/semester selector, goal multiselect and current-term action into one compact toolbar. Removed the separate zoom label, year filter, duplicate semester strip and external goal-color list. The dropdown carries color dots and checkboxes, with active goals first and completed goals collapsed; completed history stays selected and colored by default.
+- Semester relevance includes activities, sessions and all dated steps/windows, including intermediate milestones. The first-visit explanation appears for the first three openings per account/device, then remains available from the help button.
+- Estimated unfinished milestones prompt from fourteen days before their window, with an overdue message afterward. Clicking opens the date picker directly. Confirmation switches to a fixed date, derives the final deadline when applicable, and preserves checklist states and numeric results. Visible window cells contract in 280ms; reduced-motion preferences suppress the animation and the app does not navigate away.
+- Import review now places milestones immediately below their incoming parent goals, retaining original row identities and partial-import validation. No database migration was needed for this release.
+- Validation: 54 unit tests, lint, typecheck and production build passed. All eight SQL rollback suites passed on the local test database, including date confirmation retaining intermediate/final roles, numeric results, completion states and progress history.
+- Commit `c2159c75770a42ec87605255bcd48c598ab70fa8` pushed to `codex/compact-journey-dates`, then fast-forwarded to `main`. Preview READY: `dpl_GNRbXX9buHNau8XyWDhJWMgD66WM`. One Preview flow selected Year 3 HK1, excluded the later-term goal, verified the completed goal remained checked and colored, then confirmed an estimated 14-day IELTS window to one date. Browser instrumentation recorded 280ms animations, no remaining estimated cells, a single dated border, the confirmation notice and no remaining reminder. SQL retained score 6, progress 0 and an unfinished milestone. Console had no errors or warnings.
+- Production READY: `dpl_3TGVnSLKRxNMvfU5h93Yf5KUK2YQ`, matching the full commit above, with `uni-tracker-sigma.vercel.app` assigned, no alias error and HTTP 200 verified. Logged out, removed the disposable QA account and local QA files, and stopped the local test database.
+- All three approved releases are delivered. The documentation-only `docs: record deployment c2159c7` push records this status and retains the verified application deployment. Holidays and drag-and-drop remain outside the agreed scope.
