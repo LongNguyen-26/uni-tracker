@@ -9,6 +9,8 @@ export type Profile = {
   sleep_minutes?: number;
   confirmed_semesters?: number[];
   preparation_done?: boolean;
+  onboarding_term?: number | null;
+  preparation_skipped?: string[];
 };
 export type Goal = {
   id: string;

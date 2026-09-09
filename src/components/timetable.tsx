@@ -1,6 +1,8 @@
 "use client";
 import { useState, type FormEvent } from "react";
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { setupTerm } from "@/lib/onboarding";
+import WeekGoalLegend from "./week-goal-legend";
 import WeekHourGrid from "./week-hour-grid";
 import Dialog from "./dialog";
 import DatePicker from "./date-picker";
@@ -122,6 +124,7 @@ export default function Timetable({
           tế vẫn cần log riêng.
         </p>
       )}
+      <WeekGoalLegend week={week} goals={goals} sessions={sessions} activities={activities}/>
       <WeekHourGrid
         key={week}
         week={week}
@@ -214,7 +217,7 @@ export default function Timetable({
   );
 }
 
-function TimetableForm({
+export function TimetableForm({
   entry,
   profile,
   goals,
@@ -231,8 +234,7 @@ function TimetableForm({
 }) {
   const semesters = journeySemesters(profile),
     current =
-      semesters.find((s) => s.start <= todayKey() && s.end >= todayKey()) ||
-      semesters[0];
+      setupTerm(profile, todayKey());
   const [allDay, setAllDay] = useState(entry?.all_day || false);
   const [weekdays, setWeekdays] = useState<number[]>([entry?.weekday ?? 0]);
   const [from, setFrom] = useState(entry?.valid_from || current.start),
@@ -428,7 +430,7 @@ function TimetableForm({
   );
 }
 
-function WeekPlanner({
+export function WeekPlanner({
   week,
   profile,
   entries,

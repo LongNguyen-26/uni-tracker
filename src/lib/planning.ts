@@ -103,8 +103,8 @@ export function validDate(value: string) {
 export function validateSemesterSettings(
   profile: Pick<Profile, "study_years" | "semester_settings">,
 ) {
-  if (![4, 5, 6].includes(profile.study_years))
-    throw new Error("Chọn hành trình 4, 5 hoặc 6 năm.");
+  if (![3, 4, 5, 6].includes(profile.study_years))
+    throw new Error("Chọn chương trình 3, 4, 5 hoặc 6 năm.");
   const settings = [...profile.semester_settings].sort(
     (a, b) => a.index - b.index,
   );

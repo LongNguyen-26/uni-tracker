@@ -13,7 +13,7 @@ import {
 } from "./timeline";
 import { calculatedProgress, monday, validDate } from "./planning";
 
-export type ImportContext = "schedule" | "goals" | "restore";
+export type ImportContext = "schedule" | "goals" | "timetable" | "activities" | "all" | "restore";
 export type ImportKind =
   "goal" | "milestone" | "session" | "activity" | "budget" | "timetable";
 export type ImportRow = {

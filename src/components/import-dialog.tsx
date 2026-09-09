@@ -34,7 +34,8 @@ import {
   type TimetableEntry,
 } from "@/lib/schedule";
 import ImportHelp from "./import-help";
-import { importTemplate } from "@/lib/import-guide";
+import { importTemplate, IMPORT_TITLES } from "@/lib/import-guide";
+import { setupTerm } from "@/lib/onboarding";
 import { ImportReviewRow, importChoices } from "./import-review";
 import {
   isBackup,
@@ -55,6 +56,9 @@ export default function ImportDialog({
   profile,
   onClose,
   onImported,
+  onManual,
+  onSkip,
+  completionLabel = "Vào Tuần & phiên học",
 }: {
   initialKind?: "session" | "timetable";
   context?: ImportContext;
@@ -63,11 +67,12 @@ export default function ImportDialog({
   profile: Profile;
   onClose: () => void;
   onImported: () => Promise<void>;
+  onManual?: () => void;
+  onSkip?: () => void;
+  completionLabel?: string;
 }) {
-  const initialTerm =
-    journeySemesters(profile).find(
-      (t) => t.start <= todayKey() && t.end >= todayKey(),
-    ) || journeySemesters(profile)[0];
+  const initialTerm = setupTerm(profile, todayKey());
+  const [fileName, setFileName] = useState("");
   const [text, setText] = useState(""),
     [format, setFormat] = useState<FileText["format"]>("table"),
     [kind, setKind] = useState<ImportKind>(
@@ -105,7 +110,10 @@ export default function ImportDialog({
     review: RestoreReview[];
   } | null>(null);
   const formRef = useRef<HTMLFieldSetElement>(null);
-  const sample = importTemplate(todayKey(), initialTerm.end, context);
+  const sample = importTemplate(todayKey(), initialTerm.end, context, {
+    termStart: initialTerm.start,
+    goals,
+  });
   const scrollTop = () =>
     requestAnimationFrame(() =>
       formRef.current?.closest('[role="dialog"]')?.scrollTo({ top: 0 }),
@@ -126,25 +134,24 @@ export default function ImportDialog({
     },
     {
       key: "timetable",
-      title: "TKB & việc cố định",
+      title: "Lịch cố định",
       items: rows.filter((r) => r.kind === "timetable"),
     },
     {
       key: "session",
-      title: "Hoạt động · dự định",
-      items: rows.filter((r) => r.kind === "session"),
-    },
-    {
-      key: "activity",
-      title: "Hoạt động · đã xong",
-      items: rows.filter((r) => r.kind === "activity"),
+      title: "Kế hoạch tự học & hoạt động",
+      items: rows.filter((r) => r.kind === "session" || r.kind === "activity"),
     },
   ].filter((g) => g.items.length);
   function jump(row: ImportRow) {
     setOpened((prev) => [
       ...new Set([
         ...prev,
-        ["budget", "milestone"].includes(row.kind) ? "goal" : row.kind,
+        ["budget", "milestone"].includes(row.kind)
+          ? "goal"
+          : row.kind === "activity"
+            ? "session"
+            : row.kind,
       ]),
     ]);
     window.setTimeout(() => {
@@ -152,6 +159,24 @@ export default function ImportDialog({
       element?.scrollIntoView({ block: "center", behavior: "smooth" });
       element?.focus();
     }, 50);
+  }
+  async function readFile(file: File) {
+    setBusy(true);
+    setError("");
+    try {
+      const { extractFile } = await import("@/lib/import-files");
+      const result = await extractFile(file, setProgress);
+      setText(result.text);
+      setFormat(result.format);
+      setReview(result.review);
+      setSheets(result.sheets || []);
+      setFileName(file.name);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+      setProgress("");
+    }
   }
   async function parse() {
     setBusy(true);
@@ -322,6 +347,22 @@ export default function ImportDialog({
       if (!prepared.length)
         throw new Error("Không tìm thấy dòng nào trong khoảng đã chọn.");
       setRows(prepared);
+      setOpened([
+        ...new Set(
+          prepared
+            .filter(
+              (r) =>
+                r.selected && validateImportRow(r, goals, prepared, todayKey()),
+            )
+            .map((r) =>
+              ["budget", "milestone"].includes(r.kind)
+                ? "goal"
+                : r.kind === "activity"
+                  ? "session"
+                  : r.kind,
+            ),
+        ),
+      ]);
       setBatch(crypto.randomUUID());
       scrollTop();
     } catch (e) {
@@ -386,13 +427,7 @@ export default function ImportDialog({
   }
   return (
     <Dialog
-      title={
-        context === "goals"
-          ? "Nhập mục tiêu"
-          : context === "restore"
-            ? "Nhập lại toàn bộ"
-            : "Nhập lịch"
-      }
+      title={IMPORT_TITLES[context] + (rows.length ? " · Xem lại" : "")}
       description="1. Đọc dữ liệu → 2. Đối chiếu → 3. Xác nhận nhập"
       onClose={() => {
         if (!busy) onClose();
@@ -409,7 +444,7 @@ export default function ImportDialog({
               </button>
             ) : (
               <button className="button primary" onClick={onClose}>
-                Vào Tuần & phiên học
+                {completionLabel}
               </button>
             )}
           </div>
@@ -434,32 +469,32 @@ export default function ImportDialog({
                 context={context}
                 day={todayKey()}
                 termEnd={initialTerm.end}
+                termStart={initialTerm.start}
+                goals={goals}
               />
             )}
-            <label>
-              Chọn file
+            <label
+              className="import-dropzone"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (!busy && e.dataTransfer.files[0])
+                  void readFile(e.dataTransfer.files[0]);
+              }}
+            >
+              <strong>3. Kéo file vào đây hoặc bấm để chọn</strong>
+              <span>
+                {fileName ||
+                  "CSV, JSON, Excel · hỗ trợ cả ảnh, PDF, Word và ICS"}
+              </span>
               <input
                 type="file"
+                aria-label="Chọn file"
                 accept=".csv,.tsv,.txt,.xlsx,.xls,.json,.ics,.docx,.pdf,image/png,image/jpeg,image/webp"
                 disabled={busy}
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  setBusy(true);
-                  setError("");
-                  try {
-                    const { extractFile } = await import("@/lib/import-files");
-                    const r = await extractFile(file, setProgress);
-                    setText(r.text);
-                    setFormat(r.format);
-                    setReview(r.review);
-                    setSheets(r.sheets || []);
-                  } catch (e) {
-                    setError(errorMessage(e));
-                  } finally {
-                    setBusy(false);
-                    setProgress("");
-                  }
+                onChange={(e) => {
+                  if (e.target.files?.[0]) void readFile(e.target.files[0]);
+                  e.target.value = "";
                 }}
               />
             </label>
@@ -489,145 +524,160 @@ export default function ImportDialog({
                 ngăn bằng tab/dấu phẩy trước khi xem trước.
               </p>
             )}
-            <div className="form-row">
-              <label>
-                Định dạng
-                <select
-                  value={format}
-                  onChange={(e) => setFormat(e.target.value as typeof format)}
-                >
-                  <option value="table">Bảng CSV / tab</option>
-                  <option value="json">JSON</option>
-                  <option value="ics">Lịch ICS</option>
-                </select>
-              </label>
-              <label>
-                Loại mặc định
-                <select
-                  value={kind}
-                  onChange={(e) => {
-                    const value = e.target.value as ImportKind;
-                    setKind(value);
-                    if (value === "timetable") {
-                      const t = journeySemesters(profile)[term];
-                      setAnchor(t.start);
-                      setWeeks(
-                        Math.ceil(
-                          (Date.parse(t.end) - Date.parse(t.start) + 86400000) /
-                            604800000,
-                        ),
-                      );
+            <details className="import-advanced" open={review || undefined}>
+              <summary>Dán nội dung hoặc chỉnh cách đọc file</summary>
+              <div className="form">
+                <div className="form-row">
+                  <label>
+                    Định dạng
+                    <select
+                      value={format}
+                      onChange={(e) =>
+                        setFormat(e.target.value as typeof format)
+                      }
+                    >
+                      <option value="table">Bảng CSV / tab</option>
+                      <option value="json">JSON</option>
+                      <option value="ics">Lịch ICS</option>
+                    </select>
+                  </label>
+                  <label>
+                    Loại mặc định
+                    <select
+                      value={kind}
+                      onChange={(e) => {
+                        const value = e.target.value as ImportKind;
+                        setKind(value);
+                        if (value === "timetable") {
+                          const t = journeySemesters(profile)[term];
+                          setAnchor(t.start);
+                          setWeeks(
+                            Math.ceil(
+                              (Date.parse(t.end) -
+                                Date.parse(t.start) +
+                                86400000) /
+                                604800000,
+                            ),
+                          );
+                        }
+                      }}
+                    >
+                      {Object.entries(importChoices).map(([k, v]) => (
+                        <option key={k} value={k}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {false && (
+                  <label>
+                    TKB của học kỳ
+                    <select
+                      value={term}
+                      onChange={(e) => {
+                        const n = Number(e.target.value),
+                          t = journeySemesters(profile)[n];
+                        setTerm(n);
+                        setAnchor(t.start);
+                        setWeeks(
+                          Math.ceil(
+                            (Date.parse(t.end) -
+                              Date.parse(t.start) +
+                              86400000) /
+                              604800000,
+                          ),
+                        );
+                      }}
+                    >
+                      {journeySemesters(profile).map((t) => (
+                        <option key={t.index} value={t.index}>
+                          Năm {t.year} · {t.label}
+                        </option>
+                      ))}
+                    </select>
+                    <small>
+                      Lớp học không tính giờ thực làm. Chọn số tuần áp dụng hoặc
+                      sửa ngày cuối ở bản xem trước.
+                    </small>
+                  </label>
+                )}
+                <label>
+                  Bảng hoặc nội dung cần nhập
+                  <textarea
+                    className="import-source"
+                    rows={9}
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    placeholder={sample}
+                  />
+                </label>
+                <div className="section-row">
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      setText(kind === "timetable" ? timetableSample : sample);
+                      setFormat("table");
+                      setReview(false);
+                    }}
+                  >
+                    Điền bảng mẫu
+                  </button>
+                  <a href="/templates/timetable.csv" download>
+                    Tải mẫu TKB
+                  </a>
+                </div>
+                <details className="import-help">
+                  <summary>Các cột được hỗ trợ</summary>
+                  <p>
+                    Tên hoạt động (title), ngày (date), ngày kết thúc
+                    (end_date), giờ bắt đầu (start_time), giờ kết thúc
+                    (end_time), mục tiêu (goal_id: tên hoặc ID), phút (minutes),
+                    ghi chú (notes), loại (kind: goal/class/fixed/activity).
+                    Ngày dùng YYYY-MM-DD hoặc DD/MM/YYYY, giờ dùng HH:mm. Có thể
+                    dùng cột Thứ thay ngày để áp dụng tuần đầu bên dưới.
+                  </p>
+                  <p>
+                    Mục tiêu có current, target, unit để đo bằng số hoặc steps
+                    để liệt kê việc, weekly_hours là quỹ giờ mỗi tuần. Có thể
+                    đặt thước đo sau. status của hoạt động là planned (dự định)
+                    hoặc completed (đã xong); bỏ trống để suy ra theo ngày.
+                  </p>
+                </details>
+                <div className="form-row">
+                  <DatePicker
+                    label={
+                      format === "ics"
+                        ? "Đọc lịch từ ngày"
+                        : "Tuần đầu (bảng chỉ có thứ)"
                     }
-                  }}
-                >
-                  {Object.entries(importChoices).map(([k, v]) => (
-                    <option key={k} value={k}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            {false && (
-              <label>
-                TKB của học kỳ
-                <select
-                  value={term}
-                  onChange={(e) => {
-                    const n = Number(e.target.value),
-                      t = journeySemesters(profile)[n];
-                    setTerm(n);
-                    setAnchor(t.start);
-                    setWeeks(
-                      Math.ceil(
-                        (Date.parse(t.end) - Date.parse(t.start) + 86400000) /
-                          604800000,
-                      ),
-                    );
-                  }}
-                >
-                  {journeySemesters(profile).map((t) => (
-                    <option key={t.index} value={t.index}>
-                      Năm {t.year} · {t.label}
-                    </option>
-                  ))}
-                </select>
-                <small>
-                  Lớp học không tính giờ thực làm. Chọn số tuần áp dụng hoặc sửa
-                  ngày cuối ở bản xem trước.
-                </small>
-              </label>
-            )}
-            <label>
-              Bảng hoặc nội dung cần nhập
-              <textarea
-                className="import-source"
-                rows={9}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder={sample}
-              />
-            </label>
-            <div className="section-row">
-              <button
-                className="text-button"
-                onClick={() => {
-                  setText(kind === "timetable" ? timetableSample : sample);
-                  setFormat("table");
-                  setReview(false);
-                }}
-              >
-                Điền bảng mẫu
-              </button>
-              <a href="/templates/timetable.csv" download>
-                Tải mẫu TKB
-              </a>
-            </div>
-            <details className="import-help">
-              <summary>Các cột được hỗ trợ</summary>
-              <p>
-                Tên hoạt động (title), ngày (date), ngày kết thúc (end_date),
-                giờ bắt đầu (start_time), giờ kết thúc (end_time), mục tiêu
-                (goal_id: tên hoặc ID), phút (minutes), ghi chú (notes), loại
-                (kind: goal/class/fixed/activity). Ngày dùng YYYY-MM-DD hoặc
-                DD/MM/YYYY, giờ dùng HH:mm. Có thể dùng cột Thứ thay ngày để áp
-                dụng tuần đầu bên dưới.
-              </p>
-              <p>
-                Mục tiêu có current, target, unit để đo bằng số hoặc steps để
-                liệt kê việc, weekly_hours là quỹ giờ mỗi tuần. Có thể đặt thước
-                đo sau. status của hoạt động là planned (dự định) hoặc completed
-                (đã xong); bỏ trống để suy ra theo ngày.
-              </p>
+                    value={anchor}
+                    onChange={setAnchor}
+                  />
+                  <label>
+                    {format === "ics"
+                      ? "Đọc trong bao nhiêu tuần?"
+                      : "Lặp hoạt động / TKB chưa có ngày kết thúc trong bao nhiêu tuần?"}
+                    <input
+                      type="number"
+                      required
+                      min={1}
+                      max={52}
+                      value={weeks}
+                      onChange={(e) => setWeeks(Number(e.target.value))}
+                    />
+                  </label>
+                </div>
+                <p className="muted small">
+                  Mục tiêu và hoạt động đã xong không lặp. Ngày kết thúc có sẵn
+                  trong file luôn được giữ nguyên. ICS được mở rộng theo quy tắc
+                  lặp của lịch trong khoảng đã chọn.
+                </p>
+              </div>
             </details>
-            <div className="form-row">
-              <DatePicker
-                label={
-                  format === "ics"
-                    ? "Đọc lịch từ ngày"
-                    : "Tuần đầu (bảng chỉ có thứ)"
-                }
-                value={anchor}
-                onChange={setAnchor}
-              />
-              <label>
-                {format === "ics"
-                  ? "Đọc trong bao nhiêu tuần?"
-                  : "Lặp hoạt động / TKB chưa có ngày kết thúc trong bao nhiêu tuần?"}
-                <input
-                  type="number"
-                  required
-                  min={1}
-                  max={52}
-                  value={weeks}
-                  onChange={(e) => setWeeks(Number(e.target.value))}
-                />
-              </label>
-            </div>
             <p className="muted small">
-              Mục tiêu và hoạt động đã xong không lặp. Ngày kết thúc có sẵn
-              trong file luôn được giữ nguyên. ICS được mở rộng theo quy tắc lặp
-              của lịch trong khoảng đã chọn.
+              Chưa có dữ liệu nào được lưu. Bạn sẽ xem lại từng nhóm trước khi
+              xác nhận.
             </p>
             <button
               className="button primary"
@@ -639,6 +689,10 @@ export default function ImportDialog({
           </>
         ) : rows.length ? (
           <>
+            <p className="muted">
+              {fileName || "Nội dung đã dán"} · Chưa lưu cho tới khi bạn xác
+              nhận.
+            </p>
             <div className="section-row">
               <strong>
                 {rows.length} dòng · {selected.length} dòng đang chọn
@@ -813,6 +867,20 @@ export default function ImportDialog({
             </p>
           </>
         ) : null}
+        {!rows.length && !result && (onManual || onSkip) && (
+          <div className="import-guide-footer">
+            {onManual && (
+              <button type="button" className="text-button" onClick={onManual}>
+                Hoặc nhập tay
+              </button>
+            )}
+            {onSkip && (
+              <button type="button" className="text-button" onClick={onSkip}>
+                Bỏ qua bước này
+              </button>
+            )}
+          </div>
+        )}
         {error && (
           <p className="form-error" role="alert">
             {error}

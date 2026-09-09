@@ -34,12 +34,14 @@ import {
 
 export function GoalForm({
   goal,
+  defaultSemesterIndex,
   semesters,
   onClose,
   onSave,
 }: {
   goal?: Goal;
   defaultDate: string;
+  defaultSemesterIndex?: number;
   semesters: Semester[];
   onClose: () => void;
   onSave: (data: GoalInput, id?: string) => Promise<void>;
@@ -79,7 +81,7 @@ export function GoalForm({
     timing_mode: timing,
   } = finalDates(steps);
   const [completed, setCompleted] = useState(goal?.completed_on || todayKey());
-  const [scope, setScope] = useState(goal?.semester_index?.toString() ?? "");
+  const [scope, setScope] = useState(goal?.semester_index?.toString() ?? defaultSemesterIndex?.toString() ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const derived = calculatedProgress({
@@ -418,6 +420,7 @@ export function SettingsForm({
         start_year: year,
         start_month: 8,
         study_years: years,
+        onboarding_term: profile.onboarding_term == null ? null : Math.min(profile.onboarding_term, years * 2 - 1),
         semester_settings: terms,
         confirmed_semesters: confirmed,
         wake_minutes: wake,
@@ -483,7 +486,7 @@ export function SettingsForm({
                 setConfirmed((prev) => prev.filter((i) => i < n * 2));
               }}
             >
-              {[4, 5, 6].map((n) => (
+              {[3, 4, 5, 6].map((n) => (
                 <option key={n} value={n}>
                   {n} năm
                 </option>

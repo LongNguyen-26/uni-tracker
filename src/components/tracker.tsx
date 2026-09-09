@@ -552,19 +552,8 @@ export default function Tracker() {
         previous.filter((id) => allGoals.some((g) => g.id === id)),
       );
       setActivities(allActivities);
-      if (
-        !resolvedProfile.preparation_done &&
-        !allGoals.length &&
-        !allActivities.length
-      ) {
-        setView("planning");
-        setModal((previous) =>
-          previous?.kind === "recovery" ? previous : { kind: "prepare" },
-        );
-      } else if (!savedProfile)
-        setModal((previous) =>
-          previous?.kind === "recovery" ? previous : { kind: "settings" },
-        );
+      if (!savedProfile && (allGoals.length || allActivities.length))
+        setModal((previous) => previous?.kind === "recovery" ? previous : { kind: "settings" });
     } catch (error) {
       if (requestVersion === version.current.value)
         setLoadError(errorMessage(error));
@@ -984,6 +973,16 @@ export default function Tracker() {
       )
     : [];
 
+  if (profile && user && !loading && !loadError && modal?.kind !== "recovery" &&
+      (!profile.preparation_done || modal?.kind === "prepare")) {
+    return <Preparation key={user.id} profile={profile} goals={goals} activities={activities}
+      onSave={saveProfile} onSaveGoal={saveGoal} onReload={() => loadData(user)}
+      onFinish={async () => {
+        await saveProfile({ ...profile, preparation_done: true });
+        setModal(null); setView("planning");
+      }}/>;
+  }
+
   return (
     <div className="app-shell">
       {mobileNav && (
@@ -1036,6 +1035,9 @@ export default function Tracker() {
           </div>
         </div>
         <div className="sidebar-bottom">
+          <button className="nav-item" onClick={() => openWrite({ kind: "prepare" })}>
+            <Settings2 size={18}/> Thiết lập ban đầu
+          </button>
           <button
             className="nav-item"
             onClick={() => openWrite({ kind: "settings" })}
@@ -1975,29 +1977,8 @@ export default function Tracker() {
           profile={profile}
           onClose={() => setModal(null)}
           onImported={async () => {
-            if (!profile.preparation_done)
-              await saveProfile({ ...profile, preparation_done: true });
             await loadData(user);
             setView("planning");
-          }}
-        />
-      )}
-      {modal?.kind === "prepare" && profile && user && (
-        <Preparation
-          profile={profile}
-          onSave={saveProfile}
-          onImport={() => setModal({ kind: "import" })}
-          onConfirmed={() => {
-            setModal(null);
-            setView("planning");
-          }}
-          onSkip={() => {
-            void saveProfile({ ...profile, preparation_done: true })
-              .then(() => {
-                setModal(null);
-                setView("planning");
-              })
-              .catch((e) => setNotice(errorMessage(e)));
           }}
         />
       )}

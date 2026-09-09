@@ -5,6 +5,7 @@ import "./focus.css";
 import "./planning.css";
 import "./schedule.css";
 import "./import.css";
+import "./onboarding.css";
 
 const vietnam = Be_Vietnam_Pro({
   variable: "--font-vietnam",
