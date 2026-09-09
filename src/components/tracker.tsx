@@ -407,32 +407,39 @@ function GoalCard({
       {goal.description && (
         <p className="goal-description">{goal.description}</p>
       )}
-      <div className="goal-effort">
-        {journey.minutes > 0 ? (
-          <>
-            <strong style={{ color: goal.color }}>
-              {formatMinutes(journey.minutes)}
-            </strong>
-            <span>đã dồn vào mục tiêu này</span>
-            <span className="effort-counts">
-              {journey.activeDays} ngày có mặt
-              <i className="meta-sep" />
-              {journey.sessions} phiên
-              {journey.streak >= 2 && (
-                <>
-                  <i className="meta-sep" />
-                  chuỗi {journey.streak} ngày
-                </>
-              )}
-            </span>
-          </>
-        ) : (
-          <>
-            <strong className="effort-empty">Chưa ghi giờ nào</strong>
-            <span>Phiên đầu tiên của bạn sẽ được lưu lại ở đây.</span>
-          </>
-        )}
-      </div>
+      {/* A finished goal with no logged time has nothing left to invite. */}
+      {(journey.minutes > 0 || !completed) && (
+        <div className="goal-effort">
+          {journey.minutes > 0 ? (
+            <>
+              <strong style={{ color: goal.color }}>
+                {formatMinutes(journey.minutes)}
+              </strong>
+              <span>
+                {completed
+                  ? "đã dồn vào trước khi hoàn thành"
+                  : "đã dồn vào mục tiêu này"}
+              </span>
+              <span className="effort-counts">
+                {journey.activeDays} ngày có mặt
+                <i className="meta-sep" />
+                {journey.sessions} phiên
+                {journey.streak >= 2 && (
+                  <>
+                    <i className="meta-sep" />
+                    chuỗi {journey.streak} ngày
+                  </>
+                )}
+              </span>
+            </>
+          ) : (
+            <>
+              <strong className="effort-empty">Chưa ghi giờ nào</strong>
+              <span>Phiên đầu tiên của bạn sẽ được lưu lại ở đây.</span>
+            </>
+          )}
+        </div>
+      )}
       {journey.minutes > 0 && (
         <>
           <div
@@ -471,7 +478,9 @@ function GoalCard({
           {formatMinutes(journey.minutes)} bạn đã bỏ ra vẫn còn nguyên.
         </p>
       )}
-      {!completed && journey.phase && (
+      {/* The final deadline already has its own row below; naming it here twice
+          would say nothing. Only a real step earns this line. */}
+      {!completed && journey.phase && !journey.phase.is_final && (
         <p className="goal-phase">
           <span>Chặng hiện tại</span>
           {journey.phase.title}
