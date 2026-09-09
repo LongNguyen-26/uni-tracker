@@ -665,6 +665,35 @@ const goalName = (value: string) =>
   value.trim().normalize("NFC").toLocaleLowerCase("vi-VN").replace(/\s+/g, " ");
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Keep each incoming goal next to its dependent milestones in the review. */
+export function goalReviewRows(rows: ImportRow[], goals: Goal[]) {
+  const pending = rows.filter(
+    (r) => r.kind === "milestone" || r.kind === "budget",
+  );
+  const ordered: ImportRow[] = [];
+  for (const goal of rows.filter((r) => r.kind === "goal")) {
+    ordered.push(goal);
+    const saved = goals.filter(
+      (g) => goalName(g.title) === goalName(goal.title),
+    );
+    for (const r of pending)
+      if (
+        !ordered.includes(r) &&
+        ((r.goal_ref && r.goal_ref === goal.ref) ||
+          (saved.length === 1 && r.goal_id === saved[0].id))
+      )
+        ordered.push(r);
+  }
+  return [
+    ...ordered,
+    ...pending
+      .filter((r) => !ordered.includes(r))
+      .sort((a, b) =>
+        (a.goal_id || a.goal_ref).localeCompare(b.goal_id || b.goal_ref),
+      ),
+  ];
+}
+
 /** Resolve dependencies before preview; never turn an unknown UUID into a goal title. */
 export function prepareImportRows(
   input: ImportRow[],

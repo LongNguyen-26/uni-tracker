@@ -18,6 +18,7 @@ export default function DatePicker({
   min,
   max,
   optional = false,
+  defaultOpen = false,
 }: {
   label: string;
   name?: string;
@@ -26,9 +27,10 @@ export default function DatePicker({
   min?: string;
   max?: string;
   optional?: boolean;
+  defaultOpen?: boolean;
 }) {
   const id = useId();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [month, setMonth] = useState((value || todayKey()).slice(0, 7));
   const grid = useRef<HTMLDivElement>(null);
   const first = `${month}-01`,

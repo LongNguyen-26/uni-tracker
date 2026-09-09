@@ -15,6 +15,7 @@ import {
   importPayload,
   prepareImportRows,
   validImportRows,
+  goalReviewRows,
 } from "@/lib/importer";
 import {
   parseCalendar,
@@ -121,10 +122,7 @@ export default function ImportDialog({
     {
       key: "goal",
       title: "Mục tiêu",
-      items: rows.filter(
-        (r) =>
-          r.kind === "goal" || r.kind === "budget" || r.kind === "milestone",
-      ),
+      items: goalReviewRows(rows, goals),
     },
     {
       key: "timetable",

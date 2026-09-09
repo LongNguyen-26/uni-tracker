@@ -653,3 +653,128 @@
     max-height: 70vh;
   }
 }
+.journey-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.journey-heading {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: auto;
+}
+.journey-heading h2 {
+  font-size: 21px;
+  margin: 0;
+}
+.journey-heading span {
+  font-size: 12px;
+  color: #788271;
+}
+.journey-toolbar > select {
+  width: auto;
+  max-width: 230px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+.journey-toolbar > .text-button {
+  white-space: nowrap;
+}
+.journey-intro {
+  margin: 0 0 15px;
+}
+.goal-filter-menu {
+  position: relative;
+}
+.goal-filter-menu > .button {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.goal-filter-options {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 15;
+  background: #fff;
+  box-shadow: 0 8px 30px #16332220;
+  border: 1px solid #dce3d8;
+  border-radius: 10px;
+  padding: 12px;
+  width: 280px;
+  max-width: calc(100vw - 48px);
+  max-height: 360px;
+  overflow: auto;
+}
+.goal-filter-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 8px 2px;
+  cursor: pointer;
+}
+.goal-filter-options input {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  accent-color: #237a4b;
+}
+.goal-filter-options details {
+  border-top: 1px solid #e1e7dd;
+  margin-top: 8px;
+  padding-top: 10px;
+  font-size: 12px;
+}
+.goal-filter-options .row-actions {
+  justify-content: space-between;
+  margin-bottom: 7px;
+}
+.milestone-reminders {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+}
+.milestone-reminder {
+  padding: 9px 11px;
+  border: 0;
+  border-left: 3px solid;
+  border-radius: 5px;
+  background: #faf4e5;
+  text-align: left;
+  color: #66562f;
+  font-size: 12px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+.milestone-reminder:hover {
+  background: #f5ecd6;
+}
+.confirm-milestone-date {
+  border: 0;
+  padding: 0;
+  min-height: 385px;
+}
+.confirm-milestone-date .date-popover {
+  z-index: 2;
+}
+.goal-card .milestone-reminders {
+  margin-top: 15px;
+}
+@media (max-width: 680px) {
+  .journey-heading {
+    width: 100%;
+  }
+  .journey-toolbar {
+    gap: 8px;
+  }
+  .journey-toolbar > select {
+    max-width: 100%;
+    flex: 1;
+  }
+  .goal-filter-options {
+    right: 0;
+  }
+}
