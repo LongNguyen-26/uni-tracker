@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Play } from "lucide-react";
+import { Play, SlidersHorizontal } from "lucide-react";
 import Dialog from "./dialog";
 import { getSupabase } from "@/lib/supabase";
 import { errorMessage } from "@/lib/errors";
@@ -14,11 +14,14 @@ import {
 } from "@/lib/timer";
 
 // A session with no plan behind it: pick what it is, start, and let the grid
-// record the hours it actually took.
+// record the hours it actually took. Everything that can be asked afterwards is
+// asked afterwards, so the way from wanting to grind to a running clock is one
+// choice and one button.
 const OPEN_ENDED_MINUTES = 60;
 
 export default function StartNow({
   goals,
+  initialGoalId,
   userId,
   memoryKey,
   onMode,
@@ -26,14 +29,23 @@ export default function StartNow({
   onClose,
 }: {
   goals: Goal[];
+  initialGoalId?: string;
   userId: string;
   memoryKey: string;
   onMode: (mode: TimerMode) => void;
   onStarted: (id: string) => Promise<void>;
   onClose: () => void;
 }) {
-  const [goalId, setGoalId] = useState(goals[0]?.id || "");
+  const open = goals.filter((g) => g.progress < 100);
+  const choices = open.length ? open : goals;
+  const [goalId, setGoalId] = useState(
+    initialGoalId && goals.some((g) => g.id === initialGoalId)
+      ? initialGoalId
+      : choices[0]?.id || "",
+  );
   const [intent, setIntent] = useState("");
+  const [showIntent, setShowIntent] = useState(false);
+  const [showModes, setShowModes] = useState(false);
   const [mode, setMode] = useState<TimerMode>(() => {
     try {
       return timerMode(
@@ -57,6 +69,7 @@ export default function StartNow({
     onMode(next);
   }
   async function start() {
+    if (busy) return;
     setBusy(true);
     setError("");
     try {
@@ -97,87 +110,109 @@ export default function StartNow({
   return (
     <Dialog
       title="Bắt đầu ngay"
-      description="Không có phiên đặt trước — chọn việc rồi chạy."
+      description="Chọn việc rồi chạy. Phần còn lại ghi sau."
       onClose={() => {
         if (!busy) onClose();
       }}
     >
-      <div className="form start-now">
-        <label>
-          Mục tiêu
-          <select value={goalId} onChange={(e) => setGoalId(e.target.value)}>
-            <option value="">Không gắn mục tiêu</option>
-            {goals.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.title}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Định làm gì trong phiên này?
-          <input
-            value={intent}
-            maxLength={160}
-            placeholder="Ví dụ: đọc 2 paper về layout parsing"
-            onChange={(e) => setIntent(e.target.value)}
-          />
-        </label>
-        <div className="timer-modes" role="group" aria-label="Kiểu đồng hồ">
+      <form
+        className="form start-now"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void start();
+        }}
+      >
+        <div className="goal-chips" role="group" aria-label="Mục tiêu">
+          {choices.map((g) => (
+            <button
+              type="button"
+              key={g.id}
+              className={`goal-chip ${goalId === g.id ? "selected" : ""}`}
+              aria-pressed={goalId === g.id}
+              onClick={() => setGoalId(g.id)}
+            >
+              <span className="color-dot" style={{ background: g.color }} />
+              {g.title}
+            </button>
+          ))}
           <button
             type="button"
-            className={mode.kind === "up" ? "selected" : ""}
-            aria-pressed={mode.kind === "up"}
-            onClick={() => choose({ kind: "up" })}
+            className={`goal-chip ${goalId === "" ? "selected" : ""}`}
+            aria-pressed={goalId === ""}
+            onClick={() => setGoalId("")}
           >
-            Đếm lên
+            Không gắn mục tiêu
           </button>
-          <button
-            type="button"
-            className={mode.kind === "down" ? "selected" : ""}
-            aria-pressed={mode.kind === "down"}
-            onClick={() => choose({ kind: "down", minutes: 25 })}
-          >
-            Đếm ngược
-          </button>
-          {mode.kind === "down" && (
-            <>
-              {COUNTDOWN_PRESETS.map((m) => (
+        </div>
+        {showIntent && (
+          <label>
+            Định làm gì trong phiên này?
+            <input
+              autoFocus
+              value={intent}
+              maxLength={160}
+              placeholder="Ví dụ: đọc 2 paper về layout parsing"
+              onChange={(e) => setIntent(e.target.value)}
+            />
+          </label>
+        )}
+        {showModes && (
+          <div className="timer-modes" role="group" aria-label="Kiểu đồng hồ">
+            <button
+              type="button"
+              className={mode.kind === "up" ? "selected" : ""}
+              aria-pressed={mode.kind === "up"}
+              onClick={() => choose({ kind: "up" })}
+            >
+              Đếm lên
+            </button>
+            <button
+              type="button"
+              className={mode.kind === "down" ? "selected" : ""}
+              aria-pressed={mode.kind === "down"}
+              onClick={() => choose({ kind: "down", minutes: 25 })}
+            >
+              Đếm ngược
+            </button>
+            {mode.kind === "down" && (
+              <>
+                {COUNTDOWN_PRESETS.map((m) => (
+                  <button
+                    type="button"
+                    key={m}
+                    className={!custom && mode.minutes === m ? "selected" : ""}
+                    aria-pressed={!custom && mode.minutes === m}
+                    onClick={() => choose({ kind: "down", minutes: m })}
+                  >
+                    {m} phút
+                  </button>
+                ))}
                 <button
                   type="button"
-                  key={m}
-                  className={!custom && mode.minutes === m ? "selected" : ""}
-                  aria-pressed={!custom && mode.minutes === m}
-                  onClick={() => choose({ kind: "down", minutes: m })}
+                  className={custom ? "selected" : ""}
+                  aria-pressed={custom}
+                  onClick={() => setCustom(true)}
                 >
-                  {m} phút
+                  Khác
                 </button>
-              ))}
-              <button
-                type="button"
-                className={custom ? "selected" : ""}
-                aria-pressed={custom}
-                onClick={() => setCustom(true)}
-              >
-                Khác
-              </button>
-              {custom && (
-                <input
-                  type="number"
-                  min={1}
-                  max={1440}
-                  aria-label="Số phút đếm ngược"
-                  value={mode.minutes}
-                  onChange={(e) => {
-                    const m = Number(e.target.value);
-                    if (Number.isInteger(m) && m >= 1 && m <= 1440)
-                      choose({ kind: "down", minutes: m });
-                  }}
-                />
-              )}
-            </>
-          )}
-        </div>
+                {custom && (
+                  <input
+                    type="number"
+                    min={1}
+                    max={1440}
+                    aria-label="Số phút đếm ngược"
+                    value={mode.minutes}
+                    onChange={(e) => {
+                      const m = Number(e.target.value);
+                      if (Number.isInteger(m) && m >= 1 && m <= 1440)
+                        choose({ kind: "down", minutes: m });
+                    }}
+                  />
+                )}
+              </>
+            )}
+          </div>
+        )}
         <div className="timer-surface">
           <span className="eyebrow">
             {mode.kind === "up" ? "THỰC LÀM" : "CÒN LẠI"}
@@ -191,23 +226,41 @@ export default function StartNow({
               : "Hết giờ vẫn ghi tiếp nếu bạn chưa dừng."}
           </p>
           <div className="timer-actions">
-            <button
-              type="button"
-              className="button primary"
-              disabled={busy}
-              onClick={() => void start()}
-            >
+            <button type="submit" className="button primary" disabled={busy}>
               <Play size={18} />
               Bắt đầu
             </button>
           </div>
+        </div>
+        <div className="start-extras">
+          {!showIntent && (
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => setShowIntent(true)}
+            >
+              Thêm ý định (tùy chọn)
+            </button>
+          )}
+          {!showModes && (
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => setShowModes(true)}
+            >
+              <SlidersHorizontal size={14} />
+              {mode.kind === "up"
+                ? "Đếm lên · đổi kiểu"
+                : `Đếm ngược ${mode.minutes} phút · đổi kiểu`}
+            </button>
+          )}
         </div>
         {error && (
           <p className="form-error" role="alert">
             {error}
           </p>
         )}
-      </div>
+      </form>
     </Dialog>
   );
 }

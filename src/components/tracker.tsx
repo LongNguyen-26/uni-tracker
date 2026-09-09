@@ -20,6 +20,7 @@ import {
   LogOut,
   Menu,
   Pencil,
+  Play,
   Plus,
   Search,
   Settings2,
@@ -60,8 +61,11 @@ import {
   goalProgressText,
   goalDateText,
   localDateTime,
+  sessionElapsed,
   type FocusSession,
 } from "@/lib/planning";
+import { shortClock } from "@/lib/timer";
+import type { StartHandle } from "./planning";
 import {
   journeySemesters,
   journeySettings,
@@ -87,8 +91,18 @@ import {
   summarizeDays,
   type DaySummary,
 } from "@/lib/focus";
+import {
+  goalJourney,
+  isAway,
+  orderGoals,
+  stripHeights,
+  type GoalJourney,
+  type GoalOrder,
+} from "@/lib/journey";
 
-type View = "timeline" | "goals" | "journal" | "planning";
+type View = "timeline" | "goals" | "planning";
+// Looking back is one place: the map of the years and the log that fills it.
+type JourneyTab = "map" | "journal";
 type Modal =
   | {
       kind:
@@ -109,7 +123,6 @@ type Modal =
 const NAV = [
   { id: "planning" as const, label: "Tuần & phiên học", icon: Clock3 },
   { id: "goals" as const, label: "Mục tiêu của tôi", icon: Target },
-  { id: "journal" as const, label: "Nhật ký hoạt động", icon: BookOpen },
   { id: "timeline" as const, label: "Hành trình đại học", icon: LayoutGrid },
 ];
 
@@ -317,27 +330,48 @@ function SemesterCard({
   );
 }
 
+// How long ago, said the way a person would say it.
+function relativeDay(day: string, today: string) {
+  const gap = daysBetween(day, today);
+  return gap <= 0
+    ? "hôm nay"
+    : gap === 1
+      ? "hôm qua"
+      : gap < 7
+        ? `${gap} ngày trước`
+        : formatDate(day, gap > 300);
+}
+
+/**
+ * The card answers "what have I put into this?" before "how far along is it?",
+ * because the hours are the part the user actually lived.
+ */
 function GoalCard({
   goal,
+  journey,
   today,
   onEdit,
   onComplete,
   onDelete,
   onConfirmDate,
+  onContinue,
   busy,
 }: {
   goal: Goal;
+  journey: GoalJourney;
   today: string;
   onEdit: () => void;
   onComplete: () => void;
   onDelete: () => void;
   onConfirmDate: (goal: Goal, step: GoalStep) => void;
+  onContinue: () => void;
   busy: boolean;
 }) {
   const remaining = goal.deadline
     ? daysBetween(today, goal.deadline)
     : Infinity;
   const completed = goal.progress === 100;
+  const heights = stripHeights(journey.weeks);
   return (
     <article
       className="goal-card"
@@ -372,6 +406,76 @@ function GoalCard({
       </button>
       {goal.description && (
         <p className="goal-description">{goal.description}</p>
+      )}
+      <div className="goal-effort">
+        {journey.minutes > 0 ? (
+          <>
+            <strong style={{ color: goal.color }}>
+              {formatMinutes(journey.minutes)}
+            </strong>
+            <span>đã dồn vào mục tiêu này</span>
+            <span className="effort-counts">
+              {journey.activeDays} ngày có mặt
+              <i className="meta-sep" />
+              {journey.sessions} phiên
+              {journey.streak >= 2 && (
+                <>
+                  <i className="meta-sep" />
+                  chuỗi {journey.streak} ngày
+                </>
+              )}
+            </span>
+          </>
+        ) : (
+          <>
+            <strong className="effort-empty">Chưa ghi giờ nào</strong>
+            <span>Phiên đầu tiên của bạn sẽ được lưu lại ở đây.</span>
+          </>
+        )}
+      </div>
+      {journey.minutes > 0 && (
+        <>
+          <div
+            className="week-strip"
+            role="img"
+            aria-label={`${journey.weeks.length} tuần gần nhất: ${formatMinutes(journey.minutes)} tổng cộng`}
+          >
+            {journey.weeks.map((week, i) => (
+              <span key={week.start} title={formatDate(week.start)}>
+                {week.minutes > 0 && (
+                  <i
+                    style={{
+                      height: `${Math.max(8, Math.round(heights[i] * 100))}%`,
+                      background: goal.color,
+                    }}
+                  />
+                )}
+              </span>
+            ))}
+          </div>
+          <p className="effort-meta">
+            Tuần này {formatMinutes(journey.weekMinutes)}
+            {journey.last && (
+              <>
+                <i className="meta-sep" />
+                gần nhất {formatMinutes(journey.last.duration_minutes)},{" "}
+                {relativeDay(journey.last.occurred_on, today)}
+              </>
+            )}
+          </p>
+        </>
+      )}
+      {!completed && isAway(journey) && (
+        <p className="goal-away">
+          Quay lại sau {journey.daysSinceLast} ngày.{" "}
+          {formatMinutes(journey.minutes)} bạn đã bỏ ra vẫn còn nguyên.
+        </p>
+      )}
+      {!completed && journey.phase && (
+        <p className="goal-phase">
+          <span>Chặng hiện tại</span>
+          {journey.phase.title}
+        </p>
       )}
       {goal.tracking_mode === "none" ? (
         <div className="measure-empty">
@@ -434,15 +538,25 @@ function GoalCard({
             Hoàn thành
           </span>
         ) : (
-          <button
-            className="icon-button complete-button"
-            disabled={busy}
-            onClick={onComplete}
-            aria-label={`Hoàn thành ${goal.title}`}
-            title="Đánh dấu hoàn thành"
-          >
-            <Check size={17} />
-          </button>
+          <div className="goal-actions">
+            {/* Continuing is the everyday act; finishing happens once. */}
+            <button
+              className="button primary continue-button"
+              onClick={onContinue}
+            >
+              <Play size={15} />
+              {journey.minutes > 0 ? "Tiếp tục" : "Bắt đầu"}
+            </button>
+            <button
+              className="icon-button complete-button"
+              disabled={busy}
+              onClick={onComplete}
+              aria-label={`Hoàn thành ${goal.title}`}
+              title="Đánh dấu hoàn thành"
+            >
+              <Check size={17} />
+            </button>
+          </div>
         )}
       </div>
       {!completed && remaining <= 7 && (
@@ -487,6 +601,10 @@ export default function Tracker() {
   const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState("");
   const [view, setView] = useState<View>("planning");
+  const [journeyTab, setJourneyTab] = useState<JourneyTab>("map");
+  // Continuing beats starting over, so recency leads and deadlines are a choice.
+  const [goalOrder, setGoalOrder] = useState<GoalOrder>("recent");
+  const startHub = useRef<StartHandle | null>(null);
   const [modal, setModal] = useState<Modal>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [zoom, setZoom] = useState("all");
@@ -705,6 +823,30 @@ export default function Tracker() {
     (g) => !!g.deadline && g.deadline < today,
   );
   const runningSession = sessions.find((s) => s.status === "running");
+  // The clock in the top bar only needs to tick while something is running.
+  const [tick, setTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (!runningSession) return;
+    const timer = window.setInterval(() => setTick(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [runningSession]);
+  // A session already sitting on today's grid is what "start" should resume:
+  // whatever was paused, otherwise the earliest one still waiting.
+  const todaySessions = sessions
+    .filter(
+      (s) =>
+        localDateTime(s.scheduled_start).slice(0, 10) === today &&
+        (s.status === "planned" || s.status === "paused"),
+    )
+    .sort((a, b) => a.scheduled_start.localeCompare(b.scheduled_start));
+  const nextToday =
+    todaySessions.find((s) => s.status === "paused") || todaySessions[0];
+  const journeys = useMemo(() => {
+    const map = new Map<string, GoalJourney>();
+    for (const goal of goals)
+      map.set(goal.id, goalJourney(goal, activities, today));
+    return map;
+  }, [goals, activities, today]);
   const deadlines = activeGoals
     .filter((g): g is Goal & { deadline: string } => !!g.deadline)
     .sort((a, b) => a.deadline.localeCompare(b.deadline));
@@ -757,8 +899,9 @@ export default function Tracker() {
         ),
       )
     : 0;
-  function navigate(next: View) {
+  function navigate(next: View, tab: JourneyTab = "map") {
     setView(next);
+    setJourneyTab(tab);
     setQuery("");
     setMobileNav(false);
     setSemesterFilter("all");
@@ -988,9 +1131,15 @@ export default function Tracker() {
       <GoalCard
         key={goal.id}
         goal={goal}
+        journey={journeys.get(goal.id) || goalJourney(goal, activities, today)}
         today={today}
         busy={busy}
         onConfirmDate={openDateConfirmation}
+        onContinue={() =>
+          user
+            ? startHub.current?.start({ kind: "now", goalId: goal.id })
+            : setModal({ kind: "auth" })
+        }
         onEdit={() => openWrite({ kind: "goal", goal })}
         onComplete={() => void completeGoal(goal)}
         onDelete={() =>
@@ -1005,7 +1154,7 @@ export default function Tracker() {
     );
   }
 
-  const filteredGoals = goals.filter((g) => {
+  const filteredGoals = orderGoals(goals, activities, goalOrder).filter((g) => {
     const sem =
       semesterFilter === "all" ? null : semesters[Number(semesterFilter)];
     return (
@@ -1153,21 +1302,6 @@ export default function Tracker() {
             </small>
           </button>
         )}
-        {runningSession && (
-          <button
-            className="sidebar-timer"
-            onClick={() => {
-              navigate("planning");
-              setSessionRequest(runningSession.id);
-            }}
-          >
-            <span className="running-dot" aria-hidden="true" />
-            <span>
-              <strong>{runningSession.title}</strong>
-              <small>Đang chạy · mở phiên</small>
-            </span>
-          </button>
-        )}
         <div className="sidebar-bottom">
           <button
             className="nav-item"
@@ -1219,6 +1353,38 @@ export default function Tracker() {
             <strong>{NAV.find((n) => n.id === view)?.label}</strong>
           </div>
           <div className="topbar-right">
+            {/* The one thing that must never be more than a click away. It sits
+                in the frame, not on a page, so it is reachable from all of them. */}
+            {user && runningSession ? (
+              <button
+                className="focus-bar running"
+                onClick={() => setSessionRequest(runningSession.id)}
+              >
+                <span className="running-dot" aria-hidden="true" />
+                <span className="focus-clock">
+                  {shortClock(sessionElapsed(runningSession, tick))}
+                </span>
+                <span className="focus-title">{runningSession.title}</span>
+              </button>
+            ) : (
+              <button
+                className="focus-bar"
+                onClick={() =>
+                  !user
+                    ? setModal({ kind: "auth" })
+                    : startHub.current?.start(
+                        nextToday
+                          ? { kind: "session", id: nextToday.id }
+                          : { kind: "now" },
+                      )
+                }
+              >
+                <Play size={15} />
+                <span className="focus-title">
+                  {nextToday ? `Tiếp tục · ${nextToday.title}` : "Bắt đầu ngay"}
+                </span>
+              </button>
+            )}
             <span className="today-label">
               <CalendarDays size={15} />
               {today && formatDate(today, true)}
@@ -1319,22 +1485,25 @@ export default function Tracker() {
           <div className="page-heading" hidden={view === "planning"}>
             <div>
               <div className="eyebrow">
-                {view === "timeline"
-                  ? "NHÌN LẠI ĐỂ TIẾN XA HƠN"
-                  : view === "goals"
-                    ? "MỖI MỤC TIÊU, MỘT BƯỚC TIẾN"
-                    : "NHỮNG ĐIỀU ĐÁNG NHỚ"}
+                {view === "goals"
+                  ? "MỖI MỤC TIÊU, MỘT BƯỚC TIẾN"
+                  : journeyTab === "journal"
+                    ? "NHỮNG ĐIỀU ĐÁNG NHỚ"
+                    : "NHÌN LẠI ĐỂ TIẾN XA HƠN"}
               </div>
               <h1>
-                {view === "timeline"
-                  ? "Hành trình đại học"
-                  : view === "goals"
-                    ? "Mục tiêu của tôi"
-                    : "Nhật ký hoạt động"}
+                {view === "goals"
+                  ? "Mục tiêu của tôi"
+                  : journeyTab === "journal"
+                    ? "Nhật ký hoạt động"
+                    : "Hành trình đại học"}
                 <span className="heading-dot">.</span>
               </h1>
               <p>
-                {view === "timeline" && shownSemester && termMeta ? (
+                {view === "timeline" &&
+                journeyTab === "map" &&
+                shownSemester &&
+                termMeta ? (
                   <>
                     Năm {shownSemester.year} · học kỳ {shownSemester.term} ·
                     tuần {termMeta.week}/{termMeta.weeks}
@@ -1349,16 +1518,17 @@ export default function Tracker() {
                       </>
                     )}
                   </>
-                ) : view === "timeline" ? (
-                  `${profile?.study_years || 4} năm, ${(profile?.study_years || 4) * 2} học kỳ — và những bước tiến của bạn.`
                 ) : view === "goals" ? (
                   "Biến những dự định thành những điều đã làm được."
-                ) : (
+                ) : journeyTab === "journal" ? (
                   "Lưu lại từng ngày bạn đã học hỏi, trải nghiệm và trưởng thành."
+                ) : (
+                  `${profile?.study_years || 4} năm, ${(profile?.study_years || 4) * 2} học kỳ — và những bước tiến của bạn.`
                 )}
               </p>
             </div>
-            {view !== "timeline" && (
+            {(view === "goals" ||
+              (view === "timeline" && journeyTab === "journal")) && (
               <div className="heading-actions">
                 {view === "goals" ? (
                   <SplitButton
@@ -1428,318 +1598,508 @@ export default function Tracker() {
               <>
                 {view === "goals" && setupGuide}
                 {view === "timeline" && (
-                  <div className="dashboard-columns">
-                    <div className="timeline-section">
-                      <JourneyToolbar
-                        key={profile.id}
-                        profile={profile}
-                        semesters={semesters}
-                        currentSemester={currentSemester}
-                        zoom={zoom}
-                        onZoom={(value) => {
-                          didChooseView.current = true;
-                          setZoom(value);
-                        }}
-                        goals={goalsInSemester(
-                          goals,
-                          activities,
-                          sessions,
-                          zoom === "all" ? undefined : semesters[Number(zoom)],
+                  <>
+                    {/* Looking back has two faces: the shape of the years, and
+                        the days that made it. They belong on one page. */}
+                    <div className="journey-tabs" role="tablist">
+                      {(
+                        [
+                          ["map", "Bản đồ hành trình"],
+                          ["journal", "Nhật ký hoạt động"],
+                        ] as const
+                      ).map(([id, label]) => (
+                        <button
+                          key={id}
+                          role="tab"
+                          aria-selected={journeyTab === id}
+                          className={journeyTab === id ? "selected" : ""}
+                          onClick={() => {
+                            setJourneyTab(id);
+                            setQuery("");
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {journeyTab === "journal" ? (
+                      <section className="journal-section">
+                        <div className="filter-bar">
+                          <h2>
+                            {activities.length.toLocaleString("vi-VN")} hoạt
+                            động đã ghi lại
+                          </h2>
+                          <select
+                            aria-label="Lọc nhật ký theo mục tiêu"
+                            value={journalGoal}
+                            onChange={(e) => {
+                              setJournalGoal(e.target.value);
+                              setJournalLimit(30);
+                            }}
+                          >
+                            <option value="all">Tất cả mục tiêu</option>
+                            <option value="unassigned">
+                              Không gắn mục tiêu / đã xóa
+                            </option>
+                            {goals.map((g) => (
+                              <option key={g.id} value={g.id}>
+                                {g.title}
+                              </option>
+                            ))}
+                          </select>
+                          <label className="search-field">
+                            <Search size={17} />
+                            <input
+                              aria-label="Tìm hoạt động"
+                              placeholder="Tìm trong nhật ký…"
+                              value={query}
+                              onChange={(e) => {
+                                setQuery(e.target.value);
+                                setJournalLimit(30);
+                              }}
+                            />
+                          </label>
+                        </div>
+                        {filteredActivities
+                          .slice(0, journalLimit)
+                          .map((activity, index, list) => (
+                            <div key={activity.id}>
+                              {(index === 0 ||
+                                list[index - 1].occurred_on !==
+                                  activity.occurred_on) && (
+                                <h3 className="journal-date">
+                                  {activity.occurred_on === today
+                                    ? "Hôm nay"
+                                    : formatDate(activity.occurred_on, true)}
+                                </h3>
+                              )}
+                              <article className="journal-entry">
+                                <span
+                                  className={`journal-icon ${activity.kind === "completion" ? "green" : ""}`}
+                                  style={{
+                                    color: activity.color,
+                                    background: `${activity.color}18`,
+                                  }}
+                                >
+                                  {activity.kind === "completion" ? (
+                                    <CircleCheck size={20} />
+                                  ) : (
+                                    <BookOpen size={20} />
+                                  )}
+                                </span>
+                                <div>
+                                  <span className="entry-kind">
+                                    {activity.is_milestone ? "★ " : ""}
+                                    {activityLabel(activity)}
+                                  </span>
+                                  <h3>{activity.title}</h3>
+                                  <p className="activity-meta">
+                                    {activity.goal_title && (
+                                      <span>
+                                        {goals.find(
+                                          (g) => g.id === activity.goal_id,
+                                        )?.title || activity.goal_title}
+                                      </span>
+                                    )}
+                                    {activity.duration_minutes > 0 && (
+                                      <strong>
+                                        {formatMinutes(
+                                          activity.duration_minutes,
+                                        )}
+                                      </strong>
+                                    )}
+                                  </p>
+                                  {activity.notes && <p>{activity.notes}</p>}
+                                </div>
+                                {
+                                  <div className="row-actions">
+                                    <button
+                                      className="icon-button"
+                                      aria-label={`Sửa hoạt động ${activity.title}`}
+                                      onClick={() =>
+                                        openWrite({
+                                          kind: "activity",
+                                          activity,
+                                        })
+                                      }
+                                    >
+                                      <Pencil size={16} />
+                                    </button>
+                                    <button
+                                      className="icon-button danger-hover"
+                                      aria-label={`Xóa hoạt động ${activity.title}`}
+                                      onClick={() =>
+                                        openWrite({
+                                          kind: "delete",
+                                          table: "activities",
+                                          id: activity.id,
+                                          title: activity.title,
+                                        })
+                                      }
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
+                                }
+                              </article>
+                            </div>
+                          ))}
+                        {filteredActivities.length > journalLimit && (
+                          <button
+                            className="button load-more"
+                            onClick={() => setJournalLimit(journalLimit + 30)}
+                          >
+                            Xem thêm hoạt động
+                          </button>
                         )}
-                        hidden={hiddenGoals}
-                        onHidden={setHiddenGoals}
-                      />
-                      <MilestoneReminders
-                        goals={goalsInSemester(
-                          visibleGoals,
-                          activities,
-                          sessions,
-                          zoom === "all" ? undefined : semesters[Number(zoom)],
-                        )}
-                        today={today}
-                        onConfirm={openDateConfirmation}
-                      />
-                      {user &&
-                        currentSemester &&
-                        !(profile.confirmed_semesters || []).includes(
-                          currentSemester.index,
-                        ) && (
-                          <div className="term-confirm">
-                            <span>
-                              Kỳ này bắt đầu{" "}
-                              {formatDate(currentSemester.start, true)} phải
-                              không? <small>Ước tính, chỉnh được</small>
-                            </span>
+                        {!filteredActivities.length && (
+                          <div className="empty-state">
+                            <BookOpen size={34} />
+                            <h3>
+                              {query
+                                ? "Không tìm thấy hoạt động"
+                                : "Nhật ký đang chờ câu chuyện của bạn"}
+                            </h3>
+                            <p>
+                              Ghi lại việc đã làm, kiến thức đã học hoặc một sự
+                              kiện đáng nhớ.
+                            </p>
                             <button
-                              className="text-button"
-                              onClick={() =>
-                                void saveProfile({
-                                  ...profile,
-                                  semester_settings: journeySettings(profile),
-                                  confirmed_semesters: [
-                                    ...(profile.confirmed_semesters || []),
-                                    currentSemester.index,
-                                  ],
-                                }).catch((e) => setNotice(errorMessage(e)))
-                              }
+                              className="button primary"
+                              onClick={() => openWrite({ kind: "activity" })}
                             >
-                              Đúng ngày
-                            </button>
-                            <button
-                              className="text-button"
-                              onClick={() => setModal({ kind: "settings" })}
-                            >
-                              Chỉnh ngày
+                              <Plus size={17} />
+                              Ghi hoạt động
                             </button>
                           </div>
                         )}
-                      <div
-                        className={`timeline-grid ${zoom !== "all" ? "semester-zoom" : ""}`}
-                      >
-                        {Array.from(
-                          { length: profile.study_years },
-                          (_, i) => i + 1,
-                        )
-                          .filter(
-                            (y) =>
-                              zoom === "all" ||
-                              semesters[Number(zoom)]?.year === y,
-                          )
-                          .map((year) => (
-                            <div className="year-row" key={year}>
-                              <div className="year-label">
-                                <span
-                                  className={`year-number ${currentSemester?.year === year ? "current" : ""}`}
+                      </section>
+                    ) : (
+                      <div className="dashboard-columns">
+                        <div className="timeline-section">
+                          <JourneyToolbar
+                            key={profile.id}
+                            profile={profile}
+                            semesters={semesters}
+                            currentSemester={currentSemester}
+                            zoom={zoom}
+                            onZoom={(value) => {
+                              didChooseView.current = true;
+                              setZoom(value);
+                            }}
+                            goals={goalsInSemester(
+                              goals,
+                              activities,
+                              sessions,
+                              zoom === "all"
+                                ? undefined
+                                : semesters[Number(zoom)],
+                            )}
+                            hidden={hiddenGoals}
+                            onHidden={setHiddenGoals}
+                          />
+                          <MilestoneReminders
+                            goals={goalsInSemester(
+                              visibleGoals,
+                              activities,
+                              sessions,
+                              zoom === "all"
+                                ? undefined
+                                : semesters[Number(zoom)],
+                            )}
+                            today={today}
+                            onConfirm={openDateConfirmation}
+                          />
+                          {user &&
+                            currentSemester &&
+                            !(profile.confirmed_semesters || []).includes(
+                              currentSemester.index,
+                            ) && (
+                              <div className="term-confirm">
+                                <span>
+                                  Kỳ này bắt đầu{" "}
+                                  {formatDate(currentSemester.start, true)} phải
+                                  không? <small>Ước tính, chỉnh được</small>
+                                </span>
+                                <button
+                                  className="text-button"
+                                  onClick={() =>
+                                    void saveProfile({
+                                      ...profile,
+                                      semester_settings:
+                                        journeySettings(profile),
+                                      confirmed_semesters: [
+                                        ...(profile.confirmed_semesters || []),
+                                        currentSemester.index,
+                                      ],
+                                    }).catch((e) => setNotice(errorMessage(e)))
+                                  }
                                 >
-                                  {String(year).padStart(2, "0")}
+                                  Đúng ngày
+                                </button>
+                                <button
+                                  className="text-button"
+                                  onClick={() => setModal({ kind: "settings" })}
+                                >
+                                  Chỉnh ngày
+                                </button>
+                              </div>
+                            )}
+                          <div
+                            className={`timeline-grid ${zoom !== "all" ? "semester-zoom" : ""}`}
+                          >
+                            {Array.from(
+                              { length: profile.study_years },
+                              (_, i) => i + 1,
+                            )
+                              .filter(
+                                (y) =>
+                                  zoom === "all" ||
+                                  semesters[Number(zoom)]?.year === y,
+                              )
+                              .map((year) => (
+                                <div className="year-row" key={year}>
+                                  <div className="year-label">
+                                    <span
+                                      className={`year-number ${currentSemester?.year === year ? "current" : ""}`}
+                                    >
+                                      {String(year).padStart(2, "0")}
+                                    </span>
+                                    <div>
+                                      <h3>Năm {year}</h3>
+                                      <span>
+                                        {profile.start_year + year - 1} –{" "}
+                                        {profile.start_year + year}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="semester-pair">
+                                    {semesters
+                                      .filter(
+                                        (s) =>
+                                          s.year === year &&
+                                          (zoom === "all" ||
+                                            s.index === Number(zoom)),
+                                      )
+                                      .map((semester) => (
+                                        <SemesterCard
+                                          key={semester.index}
+                                          semester={semester}
+                                          summaries={summaries}
+                                          sessions={visibleSessions}
+                                          activities={visibleActivities}
+                                          goals={visibleGoals}
+                                          today={today}
+                                          selectedDay={selectedDay}
+                                          onDay={setSelectedDay}
+                                          zoomed={zoom !== "all"}
+                                          onOpen={() => {
+                                            setZoom(String(semester.index));
+                                          }}
+                                        />
+                                      ))}
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+                          <div className="heatmap-legend">
+                            <span>
+                              <i className="legend-today" />
+                              Hôm nay
+                            </span>
+                            <span>
+                              <i className="legend-deadline" />
+                              Có deadline
+                            </span>
+                            <span>
+                              <b>◆</b> Cột mốc
+                            </span>
+                            <span>
+                              <b>G / C</b> Thi GK / CK
+                            </span>
+                            <span>
+                              <b>★</b> Đã đạt
+                            </span>
+                            <span>
+                              <i className="legend-planned" />
+                              Dự định
+                            </span>
+                            <span>
+                              <i className="legend-split" />
+                              Giờ đã làm
+                            </span>
+                            <span>▧ Khoảng sự kiện</span>
+                          </div>
+                          <p className="muted small heatmap-help">
+                            Màu mục tiêu, đậm theo giờ đã log · Viền đứt: phiên
+                            dự định · Dấu góc: hạn đã chốt · Nền dải tuần:
+                            khoảng sự kiện (viền đứt khi ngày chưa chốt).
+                          </p>
+                          {shownSemester && (
+                            <SemesterRhythm
+                              semester={shownSemester}
+                              activities={visibleActivities}
+                              goals={visibleGoals}
+                              today={today}
+                              zoomed={zoom !== "all"}
+                              onWeek={setSelectedDay}
+                            />
+                          )}
+                          <div className="journey-footer">
+                            <GraduationCap size={18} />
+                            <span>
+                              Hành trình dài được tạo nên từ những ngày rất nhỏ.
+                            </span>
+                          </div>
+                        </div>
+                        <aside className="right-column">
+                          <section className="journey-card">
+                            {currentSemester && (
+                              <button
+                                className="journey-open"
+                                aria-label="Mở học kỳ hiện tại"
+                                onClick={() => {
+                                  setZoom(String(currentSemester.index));
+                                  document
+                                    .querySelector(".zoom-selector")
+                                    ?.scrollIntoView({
+                                      behavior: "smooth",
+                                      block: "start",
+                                    });
+                                }}
+                              />
+                            )}
+                            <div className="section-heading">
+                              <span className="eyebrow">
+                                CHẶNG ĐƯỜNG HIỆN TẠI
+                              </span>
+                              <Leaf size={19} />
+                            </div>
+                            <h3>
+                              {currentSemester
+                                ? `Năm ${currentSemester.year}, học kỳ ${currentSemester.term}`
+                                : today < semesters[0].start
+                                  ? "Sẵn sàng bắt đầu"
+                                  : "Một hành trình đáng nhớ"}
+                            </h3>
+                            <p>
+                              {currentSemester
+                                ? `${formatDate(currentSemester.start, true)} — ${formatDate(currentSemester.end, true)}`
+                                : `${profile.start_year} — ${profile.start_year + profile.study_years}`}
+                            </p>
+                            <div className="progress-track">
+                              <span style={{ width: `${journeyProgress}%` }} />
+                            </div>
+                            <div className="journey-caption">
+                              <span>Thời gian đã đi qua</span>
+                              <strong>{journeyProgress}%</strong>
+                            </div>
+                          </section>
+                          <section className="rail-section">
+                            <div className="section-heading">
+                              <h2>Deadline gần nhất</h2>
+                              <span className="count-badge">
+                                {deadlines.length}
+                              </span>
+                            </div>
+                            {deadlines.length ? (
+                              deadlines.slice(0, 3).map((goal) => (
+                                <button
+                                  className="deadline-item"
+                                  key={goal.id}
+                                  onClick={() =>
+                                    openWrite({ kind: "goal", goal })
+                                  }
+                                >
+                                  <span
+                                    className={`deadline-date ${goal.deadline < today ? "late" : ""}`}
+                                    style={{
+                                      borderLeft: `3px solid ${goal.color}`,
+                                    }}
+                                  >
+                                    <strong>{goal.deadline.slice(8)}</strong>
+                                    <span>
+                                      TH{Number(goal.deadline.slice(5, 7))}
+                                    </span>
+                                  </span>
+                                  <span className="deadline-content">
+                                    <strong>{goal.title}</strong>
+                                    <span
+                                      className={
+                                        goal.deadline < today ? "overdue" : ""
+                                      }
+                                    >
+                                      {goal.deadline < today
+                                        ? `Quá hạn ${daysBetween(goal.deadline, today)} ngày`
+                                        : goal.deadline === today
+                                          ? "Đến hạn hôm nay"
+                                          : `Còn ${daysBetween(today, goal.deadline)} ngày`}
+                                      <i />
+                                      {goal.tracking_mode === "milestone"
+                                        ? MILESTONE_LABELS[goal.milestone_kind]
+                                        : goalProgressText(goal)}
+                                    </span>
+                                  </span>
+                                  <ChevronRight size={15} />
+                                </button>
+                              ))
+                            ) : (
+                              <div className="empty-small">
+                                <CircleCheck size={24} />
+                                <p>
+                                  Chưa có deadline. Thêm mục tiêu đầu tiên nhé.
+                                </p>
+                              </div>
+                            )}
+                            <button
+                              className="rail-link text-button"
+                              onClick={() => navigate("goals")}
+                            >
+                              Xem tất cả mục tiêu
+                              <ArrowRight size={15} />
+                            </button>
+                          </section>
+                          <section className="rail-section recent-section">
+                            <div className="section-heading">
+                              <h2>Bước tiến gần đây</h2>
+                              <span className="tiny-dot" />
+                            </div>
+                            {recent.slice(0, 4).map((activity) => (
+                              <div className="recent-item" key={activity.id}>
+                                <span
+                                  className={`activity-dot ${activity.kind === "completion" ? "complete" : ""}`}
+                                  style={{ background: activity.color }}
+                                >
+                                  {activity.kind === "completion" ? (
+                                    <Check size={12} />
+                                  ) : null}
                                 </span>
                                 <div>
-                                  <h3>Năm {year}</h3>
+                                  <strong>{activity.title}</strong>
                                   <span>
-                                    {profile.start_year + year - 1} –{" "}
-                                    {profile.start_year + year}
+                                    {formatDate(activity.occurred_on, true)}
+                                    {` · ${activity.duration_minutes ? formatMinutes(activity.duration_minutes) : activityLabel(activity)}`}
                                   </span>
                                 </div>
                               </div>
-                              <div className="semester-pair">
-                                {semesters
-                                  .filter(
-                                    (s) =>
-                                      s.year === year &&
-                                      (zoom === "all" ||
-                                        s.index === Number(zoom)),
-                                  )
-                                  .map((semester) => (
-                                    <SemesterCard
-                                      key={semester.index}
-                                      semester={semester}
-                                      summaries={summaries}
-                                      sessions={visibleSessions}
-                                      activities={visibleActivities}
-                                      goals={visibleGoals}
-                                      today={today}
-                                      selectedDay={selectedDay}
-                                      onDay={setSelectedDay}
-                                      zoomed={zoom !== "all"}
-                                      onOpen={() => {
-                                        setZoom(String(semester.index));
-                                      }}
-                                    />
-                                  ))}
-                              </div>
-                            </div>
-                          ))}
-                      </div>
-                      <div className="heatmap-legend">
-                        <span>
-                          <i className="legend-today" />
-                          Hôm nay
-                        </span>
-                        <span>
-                          <i className="legend-deadline" />
-                          Có deadline
-                        </span>
-                        <span>
-                          <b>◆</b> Cột mốc
-                        </span>
-                        <span>
-                          <b>G / C</b> Thi GK / CK
-                        </span>
-                        <span>
-                          <b>★</b> Đã đạt
-                        </span>
-                        <span>
-                          <i className="legend-planned" />
-                          Dự định
-                        </span>
-                        <span>
-                          <i className="legend-split" />
-                          Giờ đã làm
-                        </span>
-                        <span>▧ Khoảng sự kiện</span>
-                      </div>
-                      <p className="muted small heatmap-help">
-                        Màu mục tiêu, đậm theo giờ đã log · Viền đứt: phiên dự
-                        định · Dấu góc: hạn đã chốt · Nền dải tuần: khoảng sự
-                        kiện (viền đứt khi ngày chưa chốt).
-                      </p>
-                      {shownSemester && (
-                        <SemesterRhythm
-                          semester={shownSemester}
-                          activities={visibleActivities}
-                          goals={visibleGoals}
-                          today={today}
-                          zoomed={zoom !== "all"}
-                          onWeek={setSelectedDay}
-                        />
-                      )}
-                      <div className="journey-footer">
-                        <GraduationCap size={18} />
-                        <span>
-                          Hành trình dài được tạo nên từ những ngày rất nhỏ.
-                        </span>
-                      </div>
-                    </div>
-                    <aside className="right-column">
-                      <section className="journey-card">
-                        {currentSemester && (
-                          <button
-                            className="journey-open"
-                            aria-label="Mở học kỳ hiện tại"
-                            onClick={() => {
-                              setZoom(String(currentSemester.index));
-                              document
-                                .querySelector(".zoom-selector")
-                                ?.scrollIntoView({
-                                  behavior: "smooth",
-                                  block: "start",
-                                });
-                            }}
-                          />
-                        )}
-                        <div className="section-heading">
-                          <span className="eyebrow">CHẶNG ĐƯỜNG HIỆN TẠI</span>
-                          <Leaf size={19} />
-                        </div>
-                        <h3>
-                          {currentSemester
-                            ? `Năm ${currentSemester.year}, học kỳ ${currentSemester.term}`
-                            : today < semesters[0].start
-                              ? "Sẵn sàng bắt đầu"
-                              : "Một hành trình đáng nhớ"}
-                        </h3>
-                        <p>
-                          {currentSemester
-                            ? `${formatDate(currentSemester.start, true)} — ${formatDate(currentSemester.end, true)}`
-                            : `${profile.start_year} — ${profile.start_year + profile.study_years}`}
-                        </p>
-                        <div className="progress-track">
-                          <span style={{ width: `${journeyProgress}%` }} />
-                        </div>
-                        <div className="journey-caption">
-                          <span>Thời gian đã đi qua</span>
-                          <strong>{journeyProgress}%</strong>
-                        </div>
-                      </section>
-                      <section className="rail-section">
-                        <div className="section-heading">
-                          <h2>Deadline gần nhất</h2>
-                          <span className="count-badge">
-                            {deadlines.length}
-                          </span>
-                        </div>
-                        {deadlines.length ? (
-                          deadlines.slice(0, 3).map((goal) => (
+                            ))}
+                            {!recent.length && (
+                              <p className="empty-small">
+                                Bước tiến đầu tiên của bạn sẽ xuất hiện ở đây.
+                              </p>
+                            )}
                             <button
-                              className="deadline-item"
-                              key={goal.id}
-                              onClick={() => openWrite({ kind: "goal", goal })}
+                              className="rail-link text-button"
+                              onClick={() => navigate("timeline", "journal")}
                             >
-                              <span
-                                className={`deadline-date ${goal.deadline < today ? "late" : ""}`}
-                                style={{
-                                  borderLeft: `3px solid ${goal.color}`,
-                                }}
-                              >
-                                <strong>{goal.deadline.slice(8)}</strong>
-                                <span>
-                                  TH{Number(goal.deadline.slice(5, 7))}
-                                </span>
-                              </span>
-                              <span className="deadline-content">
-                                <strong>{goal.title}</strong>
-                                <span
-                                  className={
-                                    goal.deadline < today ? "overdue" : ""
-                                  }
-                                >
-                                  {goal.deadline < today
-                                    ? `Quá hạn ${daysBetween(goal.deadline, today)} ngày`
-                                    : goal.deadline === today
-                                      ? "Đến hạn hôm nay"
-                                      : `Còn ${daysBetween(today, goal.deadline)} ngày`}
-                                  <i />
-                                  {goal.tracking_mode === "milestone"
-                                    ? MILESTONE_LABELS[goal.milestone_kind]
-                                    : goalProgressText(goal)}
-                                </span>
-                              </span>
-                              <ChevronRight size={15} />
+                              Mở nhật ký
+                              <ArrowRight size={15} />
                             </button>
-                          ))
-                        ) : (
-                          <div className="empty-small">
-                            <CircleCheck size={24} />
-                            <p>Chưa có deadline. Thêm mục tiêu đầu tiên nhé.</p>
-                          </div>
-                        )}
-                        <button
-                          className="rail-link text-button"
-                          onClick={() => navigate("goals")}
-                        >
-                          Xem tất cả mục tiêu
-                          <ArrowRight size={15} />
-                        </button>
-                      </section>
-                      <section className="rail-section recent-section">
-                        <div className="section-heading">
-                          <h2>Bước tiến gần đây</h2>
-                          <span className="tiny-dot" />
-                        </div>
-                        {recent.slice(0, 4).map((activity) => (
-                          <div className="recent-item" key={activity.id}>
-                            <span
-                              className={`activity-dot ${activity.kind === "completion" ? "complete" : ""}`}
-                              style={{ background: activity.color }}
-                            >
-                              {activity.kind === "completion" ? (
-                                <Check size={12} />
-                              ) : null}
-                            </span>
-                            <div>
-                              <strong>{activity.title}</strong>
-                              <span>
-                                {formatDate(activity.occurred_on, true)}
-                                {` · ${activity.duration_minutes ? formatMinutes(activity.duration_minutes) : activityLabel(activity)}`}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                        {!recent.length && (
-                          <p className="empty-small">
-                            Bước tiến đầu tiên của bạn sẽ xuất hiện ở đây.
-                          </p>
-                        )}
-                        <button
-                          className="rail-link text-button"
-                          onClick={() => navigate("journal")}
-                        >
-                          Mở nhật ký
-                          <ArrowRight size={15} />
-                        </button>
-                      </section>
-                    </aside>
-                  </div>
+                          </section>
+                        </aside>
+                      </div>
+                    )}
+                  </>
                 )}
                 {view === "goals" && (
                   <section className="goals-section">
@@ -1797,6 +2157,16 @@ export default function Tracker() {
                           </option>
                         ))}
                       </select>
+                      <select
+                        aria-label="Sắp xếp mục tiêu"
+                        value={goalOrder}
+                        onChange={(e) =>
+                          setGoalOrder(e.target.value as GoalOrder)
+                        }
+                      >
+                        <option value="recent">Vừa làm gần đây</option>
+                        <option value="deadline">Sắp đến hạn</option>
+                      </select>
                       <span className="muted small">
                         {filteredGoals.length} mục tiêu
                       </span>
@@ -1828,154 +2198,6 @@ export default function Tracker() {
                     )}
                   </section>
                 )}
-                {view === "journal" && (
-                  <section className="journal-section">
-                    <div className="filter-bar">
-                      <h2>
-                        {activities.length.toLocaleString("vi-VN")} hoạt động đã
-                        ghi lại
-                      </h2>
-                      <select
-                        aria-label="Lọc nhật ký theo mục tiêu"
-                        value={journalGoal}
-                        onChange={(e) => {
-                          setJournalGoal(e.target.value);
-                          setJournalLimit(30);
-                        }}
-                      >
-                        <option value="all">Tất cả mục tiêu</option>
-                        <option value="unassigned">
-                          Không gắn mục tiêu / đã xóa
-                        </option>
-                        {goals.map((g) => (
-                          <option key={g.id} value={g.id}>
-                            {g.title}
-                          </option>
-                        ))}
-                      </select>
-                      <label className="search-field">
-                        <Search size={17} />
-                        <input
-                          aria-label="Tìm hoạt động"
-                          placeholder="Tìm trong nhật ký…"
-                          value={query}
-                          onChange={(e) => {
-                            setQuery(e.target.value);
-                            setJournalLimit(30);
-                          }}
-                        />
-                      </label>
-                    </div>
-                    {filteredActivities
-                      .slice(0, journalLimit)
-                      .map((activity, index, list) => (
-                        <div key={activity.id}>
-                          {(index === 0 ||
-                            list[index - 1].occurred_on !==
-                              activity.occurred_on) && (
-                            <h3 className="journal-date">
-                              {activity.occurred_on === today
-                                ? "Hôm nay"
-                                : formatDate(activity.occurred_on, true)}
-                            </h3>
-                          )}
-                          <article className="journal-entry">
-                            <span
-                              className={`journal-icon ${activity.kind === "completion" ? "green" : ""}`}
-                              style={{
-                                color: activity.color,
-                                background: `${activity.color}18`,
-                              }}
-                            >
-                              {activity.kind === "completion" ? (
-                                <CircleCheck size={20} />
-                              ) : (
-                                <BookOpen size={20} />
-                              )}
-                            </span>
-                            <div>
-                              <span className="entry-kind">
-                                {activity.is_milestone ? "★ " : ""}
-                                {activityLabel(activity)}
-                              </span>
-                              <h3>{activity.title}</h3>
-                              <p className="activity-meta">
-                                {activity.goal_title && (
-                                  <span>
-                                    {goals.find(
-                                      (g) => g.id === activity.goal_id,
-                                    )?.title || activity.goal_title}
-                                  </span>
-                                )}
-                                {activity.duration_minutes > 0 && (
-                                  <strong>
-                                    {formatMinutes(activity.duration_minutes)}
-                                  </strong>
-                                )}
-                              </p>
-                              {activity.notes && <p>{activity.notes}</p>}
-                            </div>
-                            {
-                              <div className="row-actions">
-                                <button
-                                  className="icon-button"
-                                  aria-label={`Sửa hoạt động ${activity.title}`}
-                                  onClick={() =>
-                                    openWrite({ kind: "activity", activity })
-                                  }
-                                >
-                                  <Pencil size={16} />
-                                </button>
-                                <button
-                                  className="icon-button danger-hover"
-                                  aria-label={`Xóa hoạt động ${activity.title}`}
-                                  onClick={() =>
-                                    openWrite({
-                                      kind: "delete",
-                                      table: "activities",
-                                      id: activity.id,
-                                      title: activity.title,
-                                    })
-                                  }
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </div>
-                            }
-                          </article>
-                        </div>
-                      ))}
-                    {filteredActivities.length > journalLimit && (
-                      <button
-                        className="button load-more"
-                        onClick={() => setJournalLimit(journalLimit + 30)}
-                      >
-                        Xem thêm hoạt động
-                      </button>
-                    )}
-                    {!filteredActivities.length && (
-                      <div className="empty-state">
-                        <BookOpen size={34} />
-                        <h3>
-                          {query
-                            ? "Không tìm thấy hoạt động"
-                            : "Nhật ký đang chờ câu chuyện của bạn"}
-                        </h3>
-                        <p>
-                          Ghi lại việc đã làm, kiến thức đã học hoặc một sự kiện
-                          đáng nhớ.
-                        </p>
-                        <button
-                          className="button primary"
-                          onClick={() => openWrite({ kind: "activity" })}
-                        >
-                          <Plus size={17} />
-                          Ghi hoạt động
-                        </button>
-                      </div>
-                    )}
-                  </section>
-                )}
               </>
             )
           )}
@@ -1987,6 +2209,7 @@ export default function Tracker() {
               onTimetableChange={receiveTimetable}
               setupGuide={setupGuide}
               requestedPlan={planRequest}
+              startRef={startHub}
               onClosePlan={() => setPlanRequest(false)}
               requestedSession={sessionRequest}
               onCloseRequested={() => setSessionRequest(null)}

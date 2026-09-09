@@ -2,9 +2,11 @@
 import {
   useCallback,
   useEffect,
+  useImperativeHandle,
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from "react";
 import {
   CalendarDays,
@@ -37,6 +39,7 @@ import {
   type Profile,
 } from "@/lib/timeline";
 import { formatMinutes, isWork } from "@/lib/focus";
+import { goalJourney, lastWorkedGoal } from "@/lib/journey";
 import {
   COUNTDOWN_PRESETS,
   parseMemory,
@@ -62,6 +65,14 @@ const statusText = {
   review: "Chờ xác nhận",
   completed: "Đã ghi nhật ký",
 };
+/**
+ * Somewhere in the app asked to get going: either resume a session that is
+ * already on today's grid, or open a blank one on a goal.
+ */
+export type StartRequest =
+  { kind: "session"; id: string } | { kind: "now"; goalId?: string };
+/** Lets the top bar reach the clock without moving session state up a level. */
+export type StartHandle = { start: (request: StartRequest) => void };
 async function readAll<T>(table: string, userId: string): Promise<T[]> {
   const db = getSupabase()!;
   const out: T[] = [];
@@ -94,6 +105,7 @@ export default function PlanningHub({
   onTimetableChange,
   requestedPlan,
   onClosePlan,
+  startRef,
 }: {
   visible: boolean;
   userId?: string;
@@ -110,6 +122,8 @@ export default function PlanningHub({
   onTimetableChange: (entries: TimetableEntry[]) => void;
   requestedPlan: boolean;
   onClosePlan: () => void;
+  /** A start asked for from anywhere in the app, so the clock is one click away. */
+  startRef: RefObject<StartHandle | null>;
 }) {
   const [sessions, setSessions] = useState<FocusSession[]>([]);
   const [budgets, setBudgets] = useState<WeeklyBudget[]>([]);
@@ -130,7 +144,7 @@ export default function PlanningHub({
   const [timer, setTimer] = useState<{ id: string; instant?: boolean } | null>(
     null,
   );
-  const [startNow, setStartNow] = useState(false);
+  const [startNow, setStartNow] = useState<{ goalId?: string } | null>(null);
   const [planner, setPlanner] = useState(false);
   // The learned default is read once when a timer opens, so it needs no state.
   const timerKey = "unitracker:timer:" + userId;
@@ -187,9 +201,8 @@ export default function PlanningHub({
   }, [reload, activities]);
   useEffect(() => onSessionsChange(sessions), [sessions, onSessionsChange]);
   const selected = sessions.find(
-      (s) => s.id === (timer?.id || requestedSession),
-    ),
-    running = sessions.find((s) => s.status === "running");
+    (s) => s.id === (timer?.id || requestedSession),
+  );
   async function transition(id: string, action: string, notes?: string) {
     if (!userId) return;
     setBusy(true);
@@ -271,6 +284,24 @@ export default function PlanningHub({
     setSessions((prev) => prev.map((s) => (s.id === id ? r.data : s)));
     await onChanged();
   }
+  // One entry point for every "start" in the app. A session already on the grid
+  // is resumed in place; anything else opens a blank one on the goal asked for.
+  // Left imperative on purpose: this answers a click, it does not synchronise
+  // anything, so it must not become an effect that re-fires on every render.
+  useImperativeHandle(startRef, () => ({
+    start(request) {
+      if (!userId) return;
+      if (request.kind === "now") {
+        setStartNow({ goalId: request.goalId });
+        return;
+      }
+      const target = sessions.find((s) => s.id === request.id);
+      if (!target) return;
+      setTimer({ id: target.id });
+      if (target.status !== "running")
+        void transition(target.id, "start").catch(() => {});
+    },
+  }));
   const detailSession = sessions.find((s) => s.id === detail);
   const missingContent = sessions.filter(
     (s) =>
@@ -283,51 +314,8 @@ export default function PlanningHub({
   );
   return (
     <>
-      {/* A running session lives in its own cell and in the sidebar chip, so the
-          bar stays out of the way and only offers a way in. */}
-      {userId && !selected && !running && (
-        <div className="today-focus-bar">
-          <span>
-            <strong>Hôm nay</strong> ·{" "}
-            {
-              sessions.filter(
-                (s) =>
-                  localDateTime(s.scheduled_start).slice(0, 10) === todayKey(),
-              ).length
-            }{" "}
-            phiên đã đặt
-          </span>
-          {(() => {
-            const next = sessions.find(
-              (s) =>
-                localDateTime(s.scheduled_start).slice(0, 10) === todayKey() &&
-                ["planned", "paused"].includes(s.status),
-            );
-            return next ? (
-              <button
-                className="button primary"
-                disabled={busy}
-                onClick={() => {
-                  setTimer({ id: next.id });
-                  if (next.status !== "running")
-                    void transition(next.id, "start").catch(() => {});
-                }}
-              >
-                <Play size={16} />
-                Bắt đầu · {next.title}
-              </button>
-            ) : (
-              <button
-                className="button primary"
-                onClick={() => setStartNow(true)}
-              >
-                <Play size={16} />
-                Bắt đầu một phiên ngay
-              </button>
-            );
-          })()}
-        </div>
-      )}
+      {/* Starting lives in the top bar now, where it is reachable from every
+          view, so nothing here competes with it. */}
       {!selected && Object.keys(pendingStops).length > 0 && (
         <div className="form-error" role="alert">
           Thời gian đã dừng trên thiết bị, đang chờ máy chủ ghi.{" "}
@@ -345,12 +333,15 @@ export default function PlanningHub({
       {startNow && userId && (
         <StartNow
           goals={goals}
+          initialGoalId={
+            startNow.goalId || lastWorkedGoal(goals, activities)?.id
+          }
           userId={userId}
           memoryKey={timerKey}
           onMode={learnMode}
-          onClose={() => setStartNow(false)}
+          onClose={() => setStartNow(null)}
           onStarted={async (id) => {
-            setStartNow(false);
+            setStartNow(null);
             await reload();
             await onChanged();
             setTimer({ id, instant: true });
@@ -558,6 +549,19 @@ export default function PlanningHub({
                 .map((s) => s.actual!),
             ),
           ].slice(0, 3)}
+          {...(() => {
+            const goal = goals.find((g) => g.id === recap.goal_id);
+            if (!goal) return {};
+            // The reload that adds this session's activity may not have landed
+            // yet, so count it in by hand until it does.
+            const counted = activities.some((a) => a.session_id === recap.id);
+            return {
+              goalTitle: goal.title,
+              total:
+                goalJourney(goal, activities, todayKey()).minutes +
+                (counted ? 0 : recap.elapsed_seconds / 60),
+            };
+          })()}
           onClose={closeRecap}
           onSave={(value) => saveContent(recap.id, undefined, value)}
           onDisable={() => {

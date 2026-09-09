@@ -810,3 +810,51 @@
 .start-now .timer-surface {
   margin-top: 4px;
 }
+/* Picking the goal is the only decision this dialog insists on. */
+.goal-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.goal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 8px 13px;
+  border: 1px solid #dce4d8;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.8125rem;
+  color: #41513f;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.goal-chip:hover {
+  background: #f4f8f3;
+}
+.goal-chip.selected {
+  border-color: var(--green);
+  background: var(--green-soft);
+  color: #1f4b32;
+  font-weight: 600;
+}
+.start-extras {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.75rem;
+}
+/* The session just logged only means something next to what it adds up to. */
+.recap-total {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+.recap-total b {
+  font-weight: 600;
+  color: #1f4b32;
+}

@@ -6,12 +6,17 @@ import { formatMinutes } from "@/lib/focus";
 export default function SessionRecap({
   session,
   recent,
+  total,
+  goalTitle,
   onSave,
   onClose,
   onDisable,
 }: {
   session: FocusSession;
   recent: string[];
+  /** Every minute on this goal including the session that just ended. */
+  total?: number;
+  goalTitle?: string;
   onSave: (value: string) => Promise<void>;
   onClose: () => void;
   onDisable: () => void;
@@ -34,8 +39,16 @@ export default function SessionRecap({
         if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false);
       }}
     >
+      {/* The moment a session lands is the moment the total means something,
+          so the two numbers are said in the same breath. */}
       <strong role="status">
         Đã ghi {formatMinutes(session.elapsed_seconds / 60)}
+        {total ? (
+          <span className="recap-total">
+            {goalTitle ? `${goalTitle} giờ là ` : "Tổng cộng "}
+            <b>{formatMinutes(total)}</b>
+          </span>
+        ) : null}
       </strong>
       <form
         onSubmit={async (e) => {
