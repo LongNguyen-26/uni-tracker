@@ -18,7 +18,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   font-size: var(--fs-meta);
   font-weight: 500;
   color: #63735f;
@@ -28,9 +28,9 @@
   align-items: center;
   gap: 9px;
   background: #fff;
-  border: 1px solid #dce4d8;
-  border-radius: 8px;
-  min-height: 43px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  min-height: 40px;
   padding: 10px 12px;
   text-align: left;
   color: #27372e;
@@ -324,24 +324,48 @@
 }
 .planning-page h1 {
   font-size: var(--fs-page);
-  margin: 8px 0;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 0;
 }
-.planning-page .eyebrow {
-  font-size: var(--fs-meta);
-}
+/* Every control on this row shares one height and one baseline. */
 .week-nav {
   display: flex;
-  gap: 14px;
-  align-items: flex-end;
-  margin: 22px 0;
+  gap: 8px;
+  align-items: center;
+  margin: 20px 0;
   flex-wrap: wrap;
 }
-.week-nav > .date-field {
-  width: 190px;
+.week-nav .date-trigger {
+  height: 40px;
+  padding: 0 12px;
+  line-height: 1.35;
+  white-space: nowrap;
 }
-.week-nav > span {
-  padding-bottom: 12px;
-  font-size: var(--fs-meta);
+.week-step {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--ink-600);
+}
+.week-step:hover {
+  background: var(--surface-soft);
+  color: var(--ink-900);
+}
+.week-today {
+  margin-left: 8px;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--ink-600);
+}
+.week-today:hover {
+  background: var(--surface-soft);
 }
 
 .planning-columns {
@@ -766,11 +790,6 @@
   flex-wrap: wrap;
   font-size: var(--fs-meta);
 }
-.week-meta {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-}
 .timer-modes {
   display: flex;
   flex-wrap: wrap;
@@ -855,4 +874,47 @@
 .recap-total b {
   font-weight: 600;
   color: #1f4b32;
+}
+
+/* Weekly hours as four columns: names left, figures right and aligned. */
+.budget-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 16px;
+  font-size: var(--fs-meta);
+}
+.budget-table th,
+.budget-table td {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.budget-table thead th {
+  font-weight: 600;
+  color: var(--ink-400);
+  border-bottom-color: var(--line);
+}
+.budget-table tbody th[scope="row"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  font-weight: 500;
+  color: var(--ink-900);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.budget-table th:first-child {
+  text-align: left;
+  width: 55%;
+}
+.budget-table td {
+  color: var(--ink-600);
+  padding-left: 12px;
+}
+.budget-table tbody tr:last-child th,
+.budget-table tbody tr:last-child td {
+  border-bottom: 0;
 }

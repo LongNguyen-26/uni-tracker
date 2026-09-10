@@ -14,13 +14,14 @@ import { minuteClock, type TimetableEntry } from "@/lib/schedule";
 import {
   weekEvents,
   axisBands,
+  axisWindow,
   timeY,
   yTime,
   layoutDay,
   type WeekEvent,
 } from "@/lib/week-grid";
 import { formatMinutes } from "@/lib/focus";
-import { MoreHorizontal } from "lucide-react";
+import { CalendarClock, MoreHorizontal, Wand2 } from "lucide-react";
 
 export default function WeekHourGrid({
   week,
@@ -33,6 +34,7 @@ export default function WeekHourGrid({
   onMenu,
   onCreate,
   onIntent,
+  onPlan,
 }: {
   week: string;
   profile: Profile;
@@ -44,9 +46,11 @@ export default function WeekHourGrid({
   onMenu: (event: WeekEvent) => void;
   onCreate: (day: string, time: string) => void;
   onIntent: (id: string, intent: string) => Promise<void>;
+  /** Offered from the empty grid, where an invitation is the useful thing. */
+  onPlan?: () => void;
 }) {
   const [expanded, setExpanded] = useState<string[]>([]),
-    [outside, setOutside] = useState(false);
+    [fullDay, setFullDay] = useState(false);
   const [editing, setEditing] = useState<string | null>(null),
     [error, setError] = useState("");
   const running = sessions.find((s) => s.status === "running");
@@ -64,11 +68,13 @@ export default function WeekHourGrid({
   const timed = events.filter((e) => !e.allDay && !e.unscheduled),
     allDay = events.filter((e) => e.allDay),
     unscheduled = events.filter((e) => e.unscheduled);
-  const off = timed.filter((e) => e.start < 360 || e.end > 1380);
+  // The axis covers the hours this week actually uses, so an empty week is a
+  // short invitation rather than a tall blank.
+  const axis = useMemo(() => axisWindow(events), [events]);
   const bands = axisBands(
       events,
-      outside ? 0 : 360,
-      outside ? 1440 : 1380,
+      fullDay ? 0 : axis.start,
+      fullDay ? 1440 : axis.end,
       expanded,
     ),
     height = bands.at(-1)!.top + bands.at(-1)!.height;
@@ -93,24 +99,21 @@ export default function WeekHourGrid({
           Trục giờ {minuteClock(first)}–{minuteClock(last)} · giờ ngủ có nền xám
         </span>
         <div className="row-actions">
-          {!!off.length && (
-            <button
-              className="text-button"
-              onClick={() => setOutside(!outside)}
-            >
-              {outside
-                ? "Thu về 06:00–23:00"
-                : `${off.length} thẻ ngoài khung · Mở giờ ngoài khung`}
-            </button>
-          )}
           {expanded.length > 0 && (
             <button className="text-button" onClick={() => setExpanded([])}>
               Gập lại giờ trống
             </button>
           )}
+          <button className="text-button" onClick={() => setFullDay(!fullDay)}>
+            {fullDay ? "Thu về giờ có việc" : "Hiện 24 giờ"}
+          </button>
         </div>
       </div>
-      <div className="hour-grid-scroll" aria-label="Lịch tuần theo giờ">
+      <div className="week-layout">
+      <div
+        className={`hour-grid-scroll ${timed.length ? "" : "is-empty"}`}
+        aria-label="Lịch tuần theo giờ"
+      >
         <div className="hour-grid-inner">
           <div className="hour-grid-heading">
             <div className="hour-axis-heading">Giờ</div>
@@ -324,22 +327,42 @@ export default function WeekHourGrid({
               ))}
           </div>
         </div>
+        {/* An empty week is a place to start, not a hole. */}
+        {!timed.length && (
+          <div className="hour-grid-empty">
+            <CalendarClock size={26} />
+            <strong>
+              {unscheduled.length
+                ? `${unscheduled.length} hoạt động chưa được xếp giờ`
+                : "Tuần này chưa có giờ nào được xếp"}
+            </strong>
+            <p>Chọn một khoảng trống trong lưới, hoặc để app xếp giúp bạn.</p>
+            {onPlan && (
+              <button className="button primary" onClick={onPlan}>
+                <Wand2 size={16} />
+                Xếp vào khoảng trống
+              </button>
+            )}
+          </div>
+        )}
       </div>
       {!!unscheduled.length && (
         <section className="unscheduled-tray">
           <h3>Chưa xếp giờ</h3>
+          <p>Kéo dài của tuần, chưa gắn vào giờ nào.</p>
           {days
             .filter((day) => unscheduled.some((e) => e.day === day))
             .map((day) => (
               <div key={day}>
                 <small>{formatDate(day)}</small>
-                <div className="row-actions">
+                <div className="tray-items">
                   {unscheduled.filter((e) => e.day === day).map(compactCard)}
                 </div>
               </div>
             ))}
         </section>
       )}
+      </div>
       {error && (
         <p className="form-error" role="alert">
           {error}

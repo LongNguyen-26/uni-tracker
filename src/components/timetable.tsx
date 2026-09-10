@@ -50,6 +50,7 @@ export default function Timetable({
   activities,
   onActivity,
   onCreate,
+  onPlan,
   onIntent,
 }: {
   week: string;
@@ -67,6 +68,7 @@ export default function Timetable({
   activities: Activity[];
   onActivity: (id: string) => void;
   onCreate: (day: string, time: string) => void;
+  onPlan?: () => void;
   onIntent: (id: string, intent: string) => Promise<void>;
 }) {
   const [edit, setEdit] = useState<TimetableEntry | "new" | null>(null);
@@ -114,6 +116,7 @@ export default function Timetable({
         activities={activities}
         onCreate={onCreate}
         onIntent={onIntent}
+        onPlan={onPlan}
         onOpen={(e) => {
           // A cell is a place to work, so it opens the clock; the rarer edits
           // sit behind the corner menu.

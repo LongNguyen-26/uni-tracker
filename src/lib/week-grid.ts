@@ -151,6 +151,27 @@ export function weekEvents(
   return out;
 }
 
+/**
+ * The stretch of the day worth drawing. An empty week shows a plausible study
+ * day rather than 06:00–23:00 of nothing; a week with work shows an hour of air
+ * either side of it. Interior gaps are folded separately, by axisBands.
+ */
+export const DEFAULT_AXIS = { start: 480, end: 1200 };
+export function axisWindow(
+  events: WeekEvent[],
+  floor = DEFAULT_AXIS.start,
+  ceiling = DEFAULT_AXIS.end,
+) {
+  const timed = events.filter((e) => !e.allDay && !e.unscheduled);
+  if (!timed.length) return { ...DEFAULT_AXIS };
+  const earliest = Math.min(...timed.map((e) => e.start));
+  const latest = Math.max(...timed.map((e) => e.end));
+  return {
+    start: Math.max(0, Math.min(floor, Math.floor((earliest - 60) / 60) * 60)),
+    end: Math.min(1440, Math.max(ceiling, Math.ceil((latest + 60) / 60) * 60)),
+  };
+}
+
 export function axisBands(
   events: WeekEvent[],
   start = 360,

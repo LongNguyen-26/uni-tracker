@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   axisBands,
+  axisWindow,
   layoutDay,
   timeY,
   weekEvents,
@@ -141,4 +142,32 @@ test("a session started on the spot occupies the hour it is being worked", () =>
     [],
   );
   assert.equal(tray[0].unscheduled, true);
+});
+
+test("an empty week draws a study day, not the whole day", () => {
+  assert.deepEqual(axisWindow([]), { start: 480, end: 1200 });
+});
+
+test("the axis opens an hour either side of the work, never narrower than 08–20", () => {
+  // 09:00–11:00 sits inside the default window, which is left alone.
+  assert.deepEqual(axisWindow([event("a", 540, 660)]), {
+    start: 480,
+    end: 1200,
+  });
+  // 06:30 pulls the top of the axis back to 05:00.
+  assert.deepEqual(axisWindow([event("early", 390, 450)]), {
+    start: 300,
+    end: 1200,
+  });
+  // 22:15 pushes the bottom to 24:00 without running past it.
+  assert.deepEqual(axisWindow([event("late", 1335, 1395)]), {
+    start: 480,
+    end: 1440,
+  });
+});
+
+test("all-day and unscheduled cards do not move the axis", () => {
+  const allDay = { ...event("d", 0, 1440), allDay: true };
+  const tray = { ...event("t", 0, 45), unscheduled: true };
+  assert.deepEqual(axisWindow([allDay, tray]), { start: 480, end: 1200 });
 });

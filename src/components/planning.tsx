@@ -38,7 +38,7 @@ import {
   type Goal,
   type Profile,
 } from "@/lib/timeline";
-import { formatMinutes, isWork } from "@/lib/focus";
+import { compactMinutes, formatMinutes, isWork } from "@/lib/focus";
 import { goalJourney, lastWorkedGoal } from "@/lib/journey";
 import {
   COUNTDOWN_PRESETS,
@@ -372,13 +372,20 @@ export default function PlanningHub({
           <div className="section-heading">
             <div>
               <h1>Tuần của bạn</h1>
-              <p className="muted week-meta">
-                {formatMinutes(capacity.available)} trống
-                <i className="meta-sep" />
-                {weekly.length} phiên đã đặt ({formatMinutes(planned)})
-                <i className="meta-sep" />
-                {formatMinutes(actual)} đã ghi
-              </p>
+              <dl className="figure-row">
+                <div>
+                  <dt>{compactMinutes(capacity.available)}</dt>
+                  <dd>còn trống</dd>
+                </div>
+                <div>
+                  <dt>{weekly.length}</dt>
+                  <dd>phiên đã đặt · {compactMinutes(planned)}</dd>
+                </div>
+                <div>
+                  <dt>{compactMinutes(actual)}</dt>
+                  <dd>đã ghi tuần này</dd>
+                </div>
+              </dl>
             </div>
             <SplitButton
               label="Thêm phiên"
@@ -411,27 +418,28 @@ export default function PlanningHub({
           {setupGuide}
           <div className="week-nav">
             <button
-              className="icon-button"
+              className="week-step"
               aria-label="Tuần trước"
               onClick={() => setWeek(addDays(week, -7))}
             >
-              <ChevronLeft />
+              <ChevronLeft size={18} />
             </button>
             <DatePicker
               label="Tuần bắt đầu"
+              hideLabel
+              display={`Tuần ${formatDate(week)} – ${formatDate(addDays(week, 6), true)}`}
               value={week}
               onChange={(d) => setWeek(monday(d))}
             />
-            <span>— {formatDate(addDays(week, 6), true)}</span>
             <button
-              className="icon-button"
+              className="week-step"
               aria-label="Tuần sau"
               onClick={() => setWeek(addDays(week, 7))}
             >
-              <ChevronRight />
+              <ChevronRight size={18} />
             </button>
             <button
-              className="text-button"
+              className="button week-today"
               onClick={() => setWeek(monday(todayKey()))}
             >
               Tuần này
@@ -473,6 +481,7 @@ export default function PlanningHub({
               setEdit("new");
             }}
             onIntent={(id, intent) => saveContent(id, intent)}
+            onPlan={() => (userId ? setPlanner(true) : onAuth())}
           />
           <section className="planning-card weekly-budget-readonly">
             <h2>Quỹ giờ theo mục tiêu</h2>
@@ -480,30 +489,42 @@ export default function PlanningHub({
               Điều chỉnh quỹ giờ trong Lập kế hoạch tuần. Quỹ tuần độc lập với
               số phiên đã xếp lịch.
             </p>
-            {goals.map((g) => {
-              const budget =
-                budgets.find((b) => b.week_start === week && b.goal_id === g.id)
-                  ?.planned_minutes ?? (g.weekly_hours || 0) * 60;
-              const actual = work
-                .filter((a) => a.goal_id === g.id)
-                .reduce((n, a) => n + Number(a.duration_minutes), 0);
-              return (
-                <div className="budget-row" key={g.id}>
-                  <strong>
-                    <span
-                      className="color-dot"
-                      style={{ background: g.color }}
-                    />
-                    {g.title}
-                  </strong>
-                  <span>
-                    Quỹ tuần {formatMinutes(budget)} · thực làm{" "}
-                    {formatMinutes(actual)} · còn lại{" "}
-                    {formatMinutes(Math.max(0, budget - actual))}
-                  </span>
-                </div>
-              );
-            })}
+            {/* Four columns a reader can run an eye down, not a sentence per goal. */}
+            <table className="budget-table">
+              <thead>
+                <tr>
+                  <th scope="col">Mục tiêu</th>
+                  <th scope="col">Quỹ tuần</th>
+                  <th scope="col">Thực làm</th>
+                  <th scope="col">Còn lại</th>
+                </tr>
+              </thead>
+              <tbody>
+                {goals.map((g) => {
+                  const budget =
+                    budgets.find(
+                      (b) => b.week_start === week && b.goal_id === g.id,
+                    )?.planned_minutes ?? (g.weekly_hours || 0) * 60;
+                  const actual = work
+                    .filter((a) => a.goal_id === g.id)
+                    .reduce((n, a) => n + Number(a.duration_minutes), 0);
+                  return (
+                    <tr key={g.id}>
+                      <th scope="row">
+                        <span
+                          className="color-dot"
+                          style={{ background: g.color }}
+                        />
+                        {g.title}
+                      </th>
+                      <td>{compactMinutes(budget)}</td>
+                      <td>{compactMinutes(actual)}</td>
+                      <td>{compactMinutes(Math.max(0, budget - actual))}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </section>
           <div className="row-actions">
             <label className="checkbox-label">

@@ -4,6 +4,7 @@ import {
   buildSemesters,
   addDays,
   daysBetween,
+  formatDate,
   streak,
   demoData,
   type Activity,
@@ -75,4 +76,11 @@ test("demo history is labeled separately and has no future activities", () => {
       (a) => a.occurred_on <= "2026-09-06" && a.user_id === "demo",
     ),
   );
+});
+
+test("dates read the same with or without the year", () => {
+  assert.equal(formatDate("2026-09-07"), "07/09");
+  assert.equal(formatDate("2026-09-07", true), "07/09/2026");
+  assert.equal(formatDate("2026-01-01"), "01/01");
+  assert.equal(formatDate("2026-12-31", true), "31/12/2026");
 });

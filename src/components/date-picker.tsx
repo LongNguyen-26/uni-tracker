@@ -19,6 +19,8 @@ export default function DatePicker({
   max,
   optional = false,
   defaultOpen = false,
+  hideLabel = false,
+  display,
 }: {
   label: string;
   name?: string;
@@ -28,6 +30,10 @@ export default function DatePicker({
   max?: string;
   optional?: boolean;
   defaultOpen?: boolean;
+  /** Hide the label when the trigger text already says what the field is. */
+  hideLabel?: boolean;
+  /** Trigger text, when the value alone would not read as the whole answer. */
+  display?: string;
 }) {
   const id = useId();
   const [open, setOpen] = useState(defaultOpen);
@@ -68,7 +74,7 @@ export default function DatePicker({
   };
   return (
     <div
-      className="date-field"
+      className={`date-field ${hideLabel ? "label-hidden" : ""}`}
       ref={field}
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false);
@@ -81,7 +87,9 @@ export default function DatePicker({
         }
       }}
     >
-      <span id={`${id}-label`}>{label}</span>
+      <span id={`${id}-label`} className={hideLabel ? "sr-only" : ""}>
+        {label}
+      </span>
       <input type="hidden" name={name} value={value} />
       <button
         type="button"
@@ -96,7 +104,7 @@ export default function DatePicker({
       >
         <CalendarDays size={17} />
         <span id={`${id}-value`}>
-          {value ? formatDate(value, true) : "Chọn ngày"}
+          {display || (value ? formatDate(value, true) : "Chọn ngày")}
         </span>
       </button>
       {open && (

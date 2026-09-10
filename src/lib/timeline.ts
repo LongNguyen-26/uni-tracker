@@ -165,12 +165,16 @@ export function addDays(value: string, days: number) {
   date.setDate(date.getDate() + days);
   return dateKey(date);
 }
+/**
+ * Written the way it is written in Vietnamese, and written the same way with
+ * or without the year: the locale formatter drops to "07-09" when the year is
+ * omitted, which put two different separators in one date range.
+ */
 export function formatDate(value: string, year = false) {
-  return parseDate(value).toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    ...(year ? { year: "numeric" as const } : {}),
-  });
+  const d = parseDate(value);
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return year ? `${day}/${month}/${d.getFullYear()}` : `${day}/${month}`;
 }
 export function daysBetween(a: string, b: string) {
   const toUTC = (v: string) => {
