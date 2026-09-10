@@ -135,7 +135,9 @@ affected environment, not just a redeploy of another one.
   (time logged today, sessions, one button to start) sits under a divider; the user block stays at
   the bottom. *Not met:* the brief's "no continuous vertical whitespace > 120px" — with the user
   block pinned to the bottom, roughly 380px of rail is still empty on a 900px-tall window. Filling
-  it needs content the brief did not specify.
+  it needs content the brief did not specify; a compact "continue a goal" list was
+  offered and the user chose to leave the rail as it is, so this criterion stays open by
+  decision rather than by oversight.
 - **B — heatmap.** Month labels and day cells derive from one pair of axis variables, so every
   month label's left edge matches its column's first cell to 0.00px, at every width. The legend
   keeps four inline reminders at 13px with wrapping; the prose line listing twelve conventions is
