@@ -109,7 +109,7 @@ test("completed milestones use a star without inflating focus, history retains d
     "2026-09-06",
   );
   assert.equal(report.allocation[0].title, "Archived IELTS");
-  assert.equal(formatMinutes(125), "2 giờ 5 phút");
+  assert.equal(formatMinutes(125), "2g 5p");
 });
 test("weekly rhythm shares the semester heatmap columns and keeps one stack order", () => {
   // Two full columns plus a short trailing one, with a leading blank pad cell.
@@ -206,4 +206,15 @@ test("compact durations fit a figure slot", () => {
   assert.equal(compactMinutes(60), "1g");
   assert.equal(compactMinutes(3165), "52g 45p");
   assert.equal(compactMinutes(-10), "0p");
+});
+
+test("durations are written one way, and a timer's seconds survive", () => {
+  assert.equal(formatMinutes(0), "0p");
+  assert.equal(formatMinutes(1 / 4), "15s");
+  assert.equal(formatMinutes(45), "45p");
+  assert.equal(formatMinutes(60), "1g");
+  assert.equal(formatMinutes(90.5), "1g 30p 30s");
+  assert.equal(formatMinutes(-5), "0p");
+  // The figure form is the same shape, rounded to the minute.
+  assert.equal(compactMinutes(90.5), "1g 31p");
 });

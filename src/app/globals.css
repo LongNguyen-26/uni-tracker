@@ -38,7 +38,8 @@
   --radius-control: 8px;
   --radius-cell: 2px;
   --sidebar: 224px;
-  --content: 1660px;
+  --content: 1240px;
+  --content-wide: 1660px;
 }
 /* Every figure the eye compares down a column. */
 .figure,
@@ -430,10 +431,16 @@ nav[aria-label="Điều hướng chính"] {
 .mobile-menu {
   display: none !important;
 }
+/* Two measures, by what the page is. A week and a list of goals are read down
+   a column, so they keep one; the journey map is a grid that gets narrower the
+   moment you take width away from it, so it keeps the room. */
 .main-content {
   max-width: var(--content);
   margin: auto;
   padding: 24px 36px 0;
+}
+.main-content[data-view="map"] {
+  --content: var(--content-wide);
 }
 .demo-banner {
   display: flex;

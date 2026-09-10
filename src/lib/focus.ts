@@ -19,16 +19,23 @@ export type DaySummary = {
 };
 export const isWork = (a: Activity) =>
   a.kind === "event" && (!a.is_milestone || a.duration_minutes > 0);
+/**
+ * One way of writing a duration, everywhere. The app used to say "2 giờ 45
+ * phút" in one place and "2g 45p" in another for the same quantity, which read
+ * as two different measures. Seconds survive, because a timer's last minute
+ * matters: "45s", "45p", "2g", "2g 45p", "1g 30p 25s".
+ */
 export const formatMinutes = (minutes: number) => {
   const seconds = Math.max(0, Math.round(Number(minutes) * 60)),
     m = Math.floor(seconds / 60),
-    h = Math.floor(m / 60);
-  if (seconds < 60) return seconds ? `${seconds} giây` : "0 phút";
-  return `${h ? `${h} giờ ` : ""}${m % 60 || !h ? `${m % 60} phút` : ""}${seconds % 60 ? ` ${seconds % 60} giây` : ""}`.trim();
+    h = Math.floor(m / 60),
+    s = seconds % 60;
+  if (seconds < 60) return seconds ? `${seconds}s` : "0p";
+  return `${h ? `${h}g ` : ""}${m % 60 || !h ? `${m % 60}p` : ""}${s ? ` ${s}s` : ""}`.trim();
 };
 /**
- * The same duration written for a figure slot, where the label underneath
- * already says what it counts: "52g 45p" rather than "52 giờ 45 phút".
+ * A figure slot rounds to the minute: the label underneath says what it counts
+ * and nobody compares seconds down a column.
  */
 export const compactMinutes = (minutes: number) => {
   const m = Math.max(0, Math.round(Number(minutes)));

@@ -377,13 +377,17 @@ export function demoData(today: string): {
   const termStart = Math.max(0, span - 40);
   let turn = 0;
   for (let i = 0; i <= span; i++) {
-    // Earlier terms keep a light trace so the four-year map still reads as
-    // lived-in; the term on screen is where the detail belongs. Today always
-    // has something, because the sidebar opens on it.
+    // How much of the map is coloured is what makes it read as a journey, so
+    // roughly one day in two carries something, across all four years. Days
+    // that hold two goals are what give a cell its split colour; the term on
+    // screen gets more of them. Today always has something, because the
+    // sidebar opens on it.
     const active =
-      i === span || (i >= termStart ? (i * 7) % 3 !== 1 : (i * 11) % 6 === 2);
+      i === span ||
+      (i >= termStart ? (i * 7) % 3 !== 1 : (i * 17 + 5) % 13 >= 6);
     if (!active) continue;
-    const count = i === span ? 3 : i >= termStart ? 1 + ((i * 5) % 2) : 1;
+    const pairDay = i >= termStart ? (i * 3) % 4 < 3 : (i * 3) % 5 < 2;
+    const count = i === span ? 3 : pairDay ? 2 : 1;
     const day = addDays(first, i);
     for (let j = 0; j < count; j++) {
       // Rotate through the logs by how many have been written, not by the day

@@ -1509,7 +1509,13 @@ export default function Tracker() {
             )}
           </div>
         </header>
-        <main id="main" className="main-content">
+        {/* The two working pages read better in a column; the journey is a map
+            and wants the width. One attribute, two measures. */}
+        <main
+          id="main"
+          className="main-content"
+          data-view={view === "timeline" ? "map" : "column"}
+        >
           {preset && (
             <div className="term-confirm">
               <span>
