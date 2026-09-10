@@ -17,7 +17,7 @@
 }
 .color-picker legend,
 .tracking-choice legend {
-  font-size: 14px;
+  font-size: var(--fs-body);
   font-weight: 600;
   color: #697763;
   margin-bottom: 10px;
@@ -35,7 +35,7 @@
   border: 2px solid white;
   box-shadow: 0 0 0 1px #dce3d8;
   color: white;
-  font-size: 16px;
+  font-size: var(--fs-card);
   padding: 0;
 }
 .color-picker button[aria-pressed="true"] {
@@ -47,7 +47,7 @@
   flex-direction: row;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   margin-left: 3px;
 }
 .form .color-picker input[type="color"] {
@@ -75,9 +75,9 @@
   display: block;
 }
 .tracking-choice button span {
-  font-size: 11px;
+  font-size: var(--fs-meta);
   line-height: 1.6;
-  color: #788374;
+  color: var(--ink-400);
   margin-top: 4px;
 }
 .tracking-choice button.selected {
@@ -101,22 +101,22 @@
   flex-shrink: 0;
 }
 .inherited-color {
-  font-size: 12px;
-  color: #6f7c6a;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
 }
 .milestone-caption {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   padding: 14px 0;
 }
 .activity-meta {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-  font-size: 11px !important;
-  color: #788374;
+  font-size: var(--fs-meta) !important;
+  color: var(--ink-400);
   line-height: 1.7;
   margin-top: 5px !important;
 }
@@ -143,7 +143,7 @@
   gap: 0;
   align-items: center;
   margin: 10px 0;
-  font-size: 11px;
+  font-size: var(--fs-meta);
 }
 .allocation-item > span:nth-child(2) {
   flex: 1;
@@ -154,7 +154,7 @@
   margin-right: 10px;
 }
 .allocation-item strong {
-  font-size: 11px;
+  font-size: var(--fs-meta);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -163,8 +163,8 @@
   width: 33px;
   margin-left: 7px;
   text-align: right;
-  color: #889381;
-  font-size: 10px;
+  color: var(--ink-400);
+  font-size: var(--fs-meta);
 }
 
 .heatmap-toolbar {
@@ -176,7 +176,7 @@
 }
 .heatmap-toolbar select {
   max-width: 260px;
-  font-size: 11px;
+  font-size: var(--fs-axis);
   min-width: 0;
 }
 .goal-color-key {
@@ -189,9 +189,9 @@
   border: 0;
   background: none;
   padding: 2px 0;
-  color: #697862;
+  color: var(--ink-400);
   text-align: left;
-  font-size: 10px;
+  font-size: var(--fs-meta);
   max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -206,7 +206,7 @@
 .day-cell > span {
   font-family: Arial, sans-serif;
   color: #fff;
-  font-size: 9px;
+  font-size: var(--fs-axis);
   font-size: 70cqw;
   line-height: 1;
   font-weight: 800;
@@ -236,10 +236,10 @@
 .heatmap-legend {
   flex-wrap: wrap;
   gap: 12px;
-  font-size: 10px;
+  font-size: var(--fs-axis);
 }
 .heatmap-legend b {
-  font-size: 11px;
+  font-size: var(--fs-axis);
 }
 .legend-deadline {
   background: #eee8fd;
@@ -248,15 +248,11 @@
 .legend-split {
   background: linear-gradient(135deg, #7c3aed 0% 50%, #ea580c 50% 100%);
 }
-.heatmap-help {
-  line-height: 1.8;
-  margin-top: 10px;
-}
 .day-detail .day-list-item > span {
   display: block;
 }
 .day-list-item > strong {
-  font-size: 11px;
+  font-size: var(--fs-meta);
   text-align: right;
 }
 @media (max-width: 600px) {
@@ -298,17 +294,17 @@
   margin-bottom: 14px;
 }
 .rhythm-head h2 {
-  font-size: 0.9375rem;
+  font-size: var(--fs-body);
   font-weight: 600;
 }
 .rhythm-head > span {
-  font-size: 0.75rem;
+  font-size: var(--fs-meta);
   color: var(--muted);
   white-space: nowrap;
 }
 .rhythm-panel h3 {
   margin: 20px 0 10px;
-  font-size: 0.75rem;
+  font-size: var(--fs-meta);
   font-weight: 500;
   color: #65735f;
 }

@@ -26,6 +26,16 @@ export const formatMinutes = (minutes: number) => {
   if (seconds < 60) return seconds ? `${seconds} giây` : "0 phút";
   return `${h ? `${h} giờ ` : ""}${m % 60 || !h ? `${m % 60} phút` : ""}${seconds % 60 ? ` ${seconds % 60} giây` : ""}`.trim();
 };
+/**
+ * The same duration written for a figure slot, where the label underneath
+ * already says what it counts: "52g 45p" rather than "52 giờ 45 phút".
+ */
+export const compactMinutes = (minutes: number) => {
+  const m = Math.max(0, Math.round(Number(minutes)));
+  const h = Math.floor(m / 60);
+  if (!h) return `${m}p`;
+  return m % 60 ? `${h}g ${m % 60}p` : `${h}g`;
+};
 export const activityLabel = (a: Activity) =>
   a.kind === "completion"
     ? "Hoàn thành mục tiêu"

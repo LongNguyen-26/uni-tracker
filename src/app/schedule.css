@@ -7,12 +7,6 @@
   min-width: 0 !important;
   width: 100%;
 }
-.heatmap-inner {
-  --axis-gap: 2px;
-}
-.zoomed .heatmap-inner {
-  --axis-gap: 3px;
-}
 .day-slot {
   aspect-ratio: 1;
   min-width: 0;
@@ -49,14 +43,13 @@
   z-index: 1;
 }
 .month-labels {
-  gap: 2px;
-  font-size: 9px;
+  font-size: var(--fs-axis);
 }
 .month-labels span {
   max-width: 50px;
 }
 .range-caption {
-  font-size: 11px;
+  font-size: var(--fs-meta);
   display: flex;
   align-items: center;
   gap: 7px;
@@ -82,7 +75,7 @@
   margin: 14px 0;
 }
 .journey-strip button {
-  font-size: 10px;
+  font-size: var(--fs-meta);
   background: #edf0eb;
   border: 0;
   border-radius: 4px;
@@ -102,7 +95,7 @@
   background: #fff7dc;
   border-radius: 8px;
   margin: 12px 0;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .term-confirm small {
   display: block;
@@ -143,14 +136,14 @@
   min-height: 200px;
 }
 .week-day h3 {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   text-align: center;
   margin: 0 0 12px;
 }
 .week-day h3 small {
   display: block;
   font-weight: 400;
-  color: #819075;
+  color: var(--ink-400);
   margin-top: 4px;
 }
 .week-day.current h3 {
@@ -170,7 +163,7 @@
   padding: 10px 7px;
   border-radius: 6px;
   gap: 5px;
-  font-size: 10px;
+  font-size: var(--fs-meta);
   line-height: 1.4;
 }
 .class-block {
@@ -181,7 +174,7 @@
     #e9ecef 5px,
     #e9ecef 6px
   );
-  color: #7b8490;
+  color: var(--ink-400);
   border: 1px solid #e2e4e7;
 }
 .class-block .icon-button {
@@ -192,7 +185,7 @@
   height: 22px;
 }
 .class-block strong {
-  font-size: 11px;
+  font-size: var(--fs-meta);
 }
 .class-block span {
   padding-right: 15px;
@@ -216,7 +209,7 @@
   padding: 15px;
   border-radius: 8px;
   background: #edf2e8;
-  font-size: 15px;
+  font-size: var(--fs-body);
 }
 .plan-preview {
   max-height: 260px;
@@ -229,7 +222,7 @@
   gap: 8px;
   padding: 10px;
   border-bottom: 1px solid #e8ece4;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .timetable-section > .section-heading {
   flex-wrap: wrap;
@@ -269,16 +262,16 @@
     padding: 0.5px;
   }
   .month-labels {
-    font-size: 8px;
+    font-size: var(--fs-axis);
   }
   .heatmap-inner {
     --axis-gap: 1px;
   }
   .zoomed .heatmap-inner {
-    --axis-gap: 1.5px;
+    --axis-gap: 2px;
   }
   .zoomed .weekday-labels {
-    font-size: 8px;
+    font-size: var(--fs-axis);
   }
 }
 
@@ -361,7 +354,7 @@
 .restore-row pre {
   max-height: 260px;
   overflow: auto;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   white-space: pre-wrap;
 }
 .backup-settings {
@@ -375,7 +368,7 @@
   align-items: center;
   gap: 10px;
   margin: 12px 0;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: #697568;
 }
 .hour-grid-scroll {
@@ -403,7 +396,7 @@
 .hour-grid-heading > div {
   padding: 12px 6px;
   text-align: center;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   border-right: 1px solid #dce3d8;
 }
 .hour-grid-heading .current {
@@ -415,7 +408,7 @@
   left: 0;
   z-index: 9;
   background: #f6f8f3;
-  font-size: 11px;
+  font-size: var(--fs-axis);
   padding: 6px;
 }
 .hour-all-day > div {
@@ -437,8 +430,8 @@
 .hour-axis > span {
   position: absolute;
   right: 8px;
-  font-size: 11px;
-  color: #7a8477;
+  font-size: var(--fs-axis);
+  color: var(--ink-400);
   line-height: 15px;
 }
 .hour-days {
@@ -503,12 +496,12 @@
   background: color-mix(in srgb, var(--event-color) 7%, white);
 }
 .hour-event strong {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   overflow: hidden;
   overflow-wrap: anywhere;
 }
 .hour-event small {
-  font-size: 10px;
+  font-size: var(--fs-meta);
   margin-top: 2px;
 }
 .hour-event.compact .hour-event-main {
@@ -531,7 +524,7 @@
   bottom: 3px;
   left: 7px;
   width: calc(100% - 12px);
-  font-size: 10px;
+  font-size: var(--fs-meta);
   padding: 2px;
   border: 0;
   border-radius: 3px;
@@ -551,7 +544,7 @@
   border: 1px dashed #cbd4c7;
   background: #f2f5ef;
   color: #6a7765;
-  font-size: 11px;
+  font-size: var(--fs-meta);
   cursor: pointer;
 }
 .tray-event {
@@ -561,7 +554,7 @@
   padding: 5px 7px;
   background: #fff;
   text-align: left;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   display: flex;
   flex-direction: column;
   max-width: 100%;
@@ -576,10 +569,10 @@
   gap: 10px;
 }
 .unscheduled-tray h3 {
-  font-size: 14px;
+  font-size: var(--fs-body);
 }
 .unscheduled-tray small {
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: #6a7765;
 }
 .hour-all-day .tray-event {
@@ -609,18 +602,18 @@
   margin-right: auto;
 }
 .journey-heading h2 {
-  font-size: 21px;
+  font-size: var(--fs-section);
   margin: 0;
 }
 .journey-heading span {
-  font-size: 12px;
-  color: #788271;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
 }
 .journey-toolbar > select {
   width: auto;
   max-width: 230px;
   padding: 10px 12px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .journey-toolbar > .text-button {
   white-space: nowrap;
@@ -632,7 +625,7 @@
   position: relative;
 }
 .goal-filter-menu > .button {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   white-space: nowrap;
 }
 .goal-filter-options {
@@ -654,7 +647,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   padding: 8px 2px;
   cursor: pointer;
 }
@@ -668,7 +661,7 @@
   border-top: 1px solid #e1e7dd;
   margin-top: 8px;
   padding-top: 10px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .goal-filter-options .row-actions {
   justify-content: space-between;
@@ -687,7 +680,7 @@
   background: #faf4e5;
   text-align: left;
   color: #66562f;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.6;
   cursor: pointer;
 }

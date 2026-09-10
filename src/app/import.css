@@ -5,24 +5,24 @@
   border-radius: 14px;
 }
 .import-help > strong {
-  font-size: 17px;
+  font-size: var(--fs-section);
   line-height: 1.5;
 }
 .import-help p {
   color: #687569;
-  font-size: 14px;
+  font-size: var(--fs-body);
   line-height: 1.7;
   margin: 10px 0 16px;
 }
 .import-help details {
   margin-top: 16px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .import-help textarea {
   margin-top: 10px;
   width: 100%;
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .import-help summary,
 .import-group > summary {
@@ -46,7 +46,7 @@
 }
 .import-group > summary span {
   color: #687569;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .import-group .import-table-scroll {
   max-height: none;
@@ -75,11 +75,11 @@
   vertical-align: top;
 }
 .import-group td label {
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .import-group td input,
 .import-group td select {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   min-width: 0;
 }
 .import-group td > .text-button {
@@ -106,8 +106,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  color: #798476;
-  font-size: 13px;
+  color: var(--ink-400);
+  font-size: var(--fs-meta);
   margin: 18px 0;
 }
 @media (max-width: 680px) {
@@ -155,7 +155,7 @@
   .import-group td:nth-child(5)::before {
     content: "Gắn mục tiêu";
     display: block;
-    font-size: 12px;
+    font-size: var(--fs-meta);
     margin-bottom: 6px;
   }
   .import-group td:nth-child(5):empty {

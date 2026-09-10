@@ -158,3 +158,17 @@ export function lastWorkedGoal(goals: Goal[], activities: Activity[]) {
     orderGoals(open.length ? open : goals, activities, "recent")[0] || null
   );
 }
+
+/**
+ * What today has amounted to so far. The sidebar leads with this because the
+ * question a student opens the app with is "have I done anything yet?".
+ */
+export function dayEffort(activities: Activity[], day: string) {
+  const logged = activities.filter(
+    (a) => a.occurred_on === day && isWork(a) && Number(a.duration_minutes) > 0,
+  );
+  return {
+    minutes: logged.reduce((n, a) => n + Number(a.duration_minutes), 0),
+    sessions: logged.length,
+  };
+}

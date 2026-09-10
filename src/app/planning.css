@@ -19,7 +19,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   font-weight: 500;
   color: #63735f;
 }
@@ -89,13 +89,13 @@
   background: #fff;
   color: #354d3d;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .calendar-grid button:hover {
   background: #e9f3e7;
 }
 .calendar-grid button.outside {
-  color: #a7b0a2;
+  color: var(--ink-400);
 }
 .calendar-grid button:disabled {
   opacity: 0.25;
@@ -109,9 +109,9 @@
   box-shadow: inset 0 0 0 1px #237a4b;
 }
 .weekdays {
-  font-size: 10px;
+  font-size: var(--fs-axis);
   text-align: center;
-  color: #7c8d74;
+  color: var(--ink-400);
   margin-bottom: 7px;
 }
 .calendar-bottom {
@@ -121,7 +121,7 @@
 }
 .date-popover > input {
   width: 100%;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .step-editor {
   display: grid;
@@ -155,7 +155,7 @@
 .semester-settings summary {
   cursor: pointer;
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .semester-settings details > .form {
   margin-top: 18px;
@@ -173,11 +173,11 @@
   margin: 17px 0;
 }
 .metric-caption span {
-  font-size: 11px;
-  color: #7b8974;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
 }
 .metric-caption strong {
-  font-size: 23px;
+  font-size: var(--fs-figure);
   letter-spacing: -0.6px;
 }
 .goal-bottom {
@@ -196,28 +196,26 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 11px;
-  color: #6d7d65;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
 }
 .semester-zoom .semester-pair {
   grid-template-columns: 1fr;
 }
 .zoomed .heatmap-inner {
   min-width: 700px;
-  --axis-gutter: 24px;
-  --axis-gap: 5px;
 }
 .zoomed .day-cell {
   min-height: 21px;
 }
 .zoomed .month-labels {
-  font-size: 11px;
+  font-size: var(--fs-axis);
 }
 .zoomed .weekday-labels {
-  font-size: 10px;
+  font-size: var(--fs-axis);
 }
 .zoomed .semester-date {
-  font-size: 11px;
+  font-size: var(--fs-axis);
 }
 .day-cell.outside-term {
   opacity: 0.25;
@@ -242,7 +240,7 @@
   display: flex;
   gap: 7px;
   align-items: center;
-  font-size: 11px;
+  font-size: var(--fs-meta);
 }
 .range-track {
   height: 7px;
@@ -257,8 +255,8 @@
   min-width: 5px;
 }
 .goal-range small {
-  color: #8a9583;
-  font-size: 10px;
+  color: var(--ink-400);
+  font-size: var(--fs-meta);
 }
 .journey-card {
   position: relative;
@@ -285,7 +283,7 @@
   color: #356442;
   background: #e9f2e4;
   font-weight: 700;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .account-popover {
   position: absolute;
@@ -302,11 +300,11 @@
   gap: 9px;
 }
 .account-popover strong {
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .account-popover small {
-  font-size: 11px;
-  color: #7d8a75;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
   overflow-wrap: anywhere;
 }
 .account-popover button {
@@ -318,18 +316,18 @@
   border: 0;
   border-top: 1px solid #eff2eb;
   text-align: left;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: #42583b;
 }
 .planning-page {
   padding-bottom: 30px;
 }
 .planning-page h1 {
-  font-size: 28px;
+  font-size: var(--fs-page);
   margin: 8px 0;
 }
 .planning-page .eyebrow {
-  font-size: 10px;
+  font-size: var(--fs-meta);
 }
 .week-nav {
   display: flex;
@@ -343,7 +341,7 @@
 }
 .week-nav > span {
   padding-bottom: 12px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 
 .planning-columns {
@@ -359,7 +357,7 @@
   min-width: 0;
 }
 .planning-card > h2 {
-  font-size: 16px;
+  font-size: var(--fs-card);
   margin-bottom: 8px;
 }
 .planning-card > p {
@@ -374,19 +372,19 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: #364d3b;
 }
 .budget-row small {
-  font-size: 10px;
-  color: #7b8a70;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
 }
 .hours-input {
   display: flex;
   align-items: center;
   gap: 7px;
-  color: #7a8a71;
-  font-size: 11px;
+  color: var(--ink-400);
+  font-size: var(--fs-meta);
 }
 .hours-input input {
   width: 70px;
@@ -421,15 +419,15 @@
   flex: 1;
 }
 .session-open strong {
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .session-open span {
-  font-size: 11px;
-  color: #77876c;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
 }
 .session-open small {
-  font-size: 10px;
-  color: #8b987f;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
 }
 .session-row > .row-actions {
   justify-content: flex-end;
@@ -442,8 +440,8 @@
   justify-content: center;
   flex-direction: column;
   gap: 14px;
-  color: #839077;
-  font-size: 13px;
+  color: var(--ink-400);
+  font-size: var(--fs-meta);
 }
 .timer-chip {
   position: fixed;
@@ -460,7 +458,7 @@
   border-radius: 30px;
   border: 1px solid #6f9562;
   box-shadow: 0 6px 22px #23372326;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .timer-surface {
   background: #121212;
@@ -495,11 +493,11 @@
 }
 .timer-surface > p {
   color: #c1c1c1;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .timer-surface > small {
   color: #898989;
-  font-size: 11px;
+  font-size: var(--fs-meta);
   line-height: 1.7;
   max-width: 470px;
 }
@@ -522,7 +520,7 @@
 }
 .import-source {
   font-family: monospace;
-  font-size: 12px !important;
+  font-size: var(--fs-meta) !important;
   white-space: pre;
 }
 .import-warning {
@@ -531,11 +529,11 @@
   border: 1px solid #ecdda3;
   border-radius: 8px;
   color: #856a26;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.8;
 }
 .import-help {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: #64765b;
   line-height: 1.9;
 }
@@ -548,7 +546,7 @@
 }
 .import-form .section-row {
   flex-wrap: wrap;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .import-table-scroll {
   overflow: auto;
@@ -560,7 +558,7 @@
   border-collapse: collapse;
   width: 100%;
   min-width: 740px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .import-table th {
   position: sticky;
@@ -568,8 +566,8 @@
   background: #eff4e9;
   text-align: left;
   padding: 11px;
-  font-size: 10px;
-  color: #6b7c60;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
   z-index: 1;
 }
 .import-table td {
@@ -581,7 +579,7 @@
 .import-table select {
   width: 100%;
   padding: 7px;
-  font-size: 11px;
+  font-size: var(--fs-meta);
   min-height: 32px;
   margin: 2px 0;
 }
@@ -590,7 +588,7 @@
   height: 17px;
 }
 .import-table small {
-  font-size: 10px;
+  font-size: var(--fs-meta);
   display: block;
   max-width: 210px;
   line-height: 1.6;
@@ -709,7 +707,7 @@
 }
 
 .preview-details {
-  font-size: 10px;
+  font-size: var(--fs-meta);
   margin-top: 6px;
   min-width: 180px;
 }
@@ -723,7 +721,7 @@
 }
 .preview-details textarea {
   width: 100%;
-  font-size: 11px;
+  font-size: var(--fs-meta);
 }
 .preview-details ul {
   padding-left: 15px;
@@ -756,7 +754,7 @@
   flex: 1;
 }
 .session-recap .row-actions {
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .weekly-budget-readonly {
   margin: 20px 0;
@@ -766,7 +764,7 @@
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .week-meta {
   display: flex;
@@ -786,7 +784,7 @@
   border-radius: 8px;
   background: #fff;
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: var(--fs-meta);
   color: #41513f;
 }
 .timer-modes button.selected {
@@ -798,7 +796,7 @@
 .timer-modes input {
   width: 84px;
   padding: 7px 9px;
-  font-size: 0.8125rem;
+  font-size: var(--fs-meta);
 }
 .timer-hint {
   margin-bottom: 12px;
@@ -825,7 +823,7 @@
   border: 1px solid #dce4d8;
   border-radius: 999px;
   background: #fff;
-  font-size: 0.8125rem;
+  font-size: var(--fs-meta);
   color: #41513f;
   overflow-wrap: anywhere;
   text-align: left;
@@ -844,13 +842,13 @@
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px;
-  font-size: 0.75rem;
+  font-size: var(--fs-meta);
 }
 /* The session just logged only means something next to what it adds up to. */
 .recap-total {
   display: block;
   margin-top: 3px;
-  font-size: 0.75rem;
+  font-size: var(--fs-meta);
   font-weight: 400;
   color: var(--muted);
 }

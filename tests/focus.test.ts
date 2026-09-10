@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  compactMinutes,
   dayBackground,
   formatMinutes,
   isWork,
@@ -192,4 +193,12 @@ test("weekly rhythm marks columns after today as future", () => {
     [false, true],
   );
   assert.equal(rhythm.peak, 60);
+});
+
+test("compact durations fit a figure slot", () => {
+  assert.equal(compactMinutes(0), "0p");
+  assert.equal(compactMinutes(45), "45p");
+  assert.equal(compactMinutes(60), "1g");
+  assert.equal(compactMinutes(3165), "52g 45p");
+  assert.equal(compactMinutes(-10), "0p");
 });

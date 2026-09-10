@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   currentPhase,
+  dayEffort,
   goalJourney,
   isAway,
   lastWorkedGoal,
@@ -209,4 +210,17 @@ test("starting now preselects the last worked goal, skipping finished ones", () 
   assert.equal(lastWorkedGoal([done, open], logs)?.id, "open");
   assert.equal(lastWorkedGoal([], logs), null);
   assert.equal(lastWorkedGoal([done], logs)?.id, "done");
+});
+
+test("today's effort counts logged work only, and ignores other days", () => {
+  const logs = [
+    event({ id: "1", occurred_on: TODAY, duration_minutes: 45 }),
+    event({ id: "2", occurred_on: TODAY, duration_minutes: 20 }),
+    // A milestone note carries no minutes, so it is not effort.
+    event({ id: "3", occurred_on: TODAY, duration_minutes: 0 }),
+    event({ id: "4", occurred_on: "2026-09-09", duration_minutes: 90 }),
+  ];
+  assert.deepEqual(dayEffort(logs, TODAY), { minutes: 65, sessions: 2 });
+  assert.deepEqual(dayEffort(logs, "2026-09-08"), { minutes: 0, sessions: 0 });
+  assert.deepEqual(dayEffort([], TODAY), { minutes: 0, sessions: 0 });
 });

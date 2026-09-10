@@ -371,7 +371,6 @@ export default function PlanningHub({
         <div className="planning-page">
           <div className="section-heading">
             <div>
-              <span className="eyebrow">Ý ĐỊNH → THỰC TẾ</span>
               <h1>Tuần của bạn</h1>
               <p className="muted week-meta">
                 {formatMinutes(capacity.available)} trống

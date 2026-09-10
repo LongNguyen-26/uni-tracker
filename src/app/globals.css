@@ -1,9 +1,30 @@
 :root {
-  --bg: #f8faf9;
+  /* Surfaces. The page keeps a faint neutral ground so white cards read as
+     raised; only the ink ramp and the hairline changed. */
+  --bg: #f7f8f7;
   --surface: #fff;
-  --text: #1d2924;
-  --muted: #758078;
-  --line: #e6ebe7;
+  --surface-soft: #f2f4f2;
+  --line: #e3e6e3;
+
+  /* Ink — exactly three levels. Nothing lighter than --ink-400 may carry text;
+     anything fainter is what made the old screens read as washed out. */
+  --ink-900: #14181f;
+  --ink-600: #4a5361;
+  --ink-400: #6b7482;
+  --text: var(--ink-900);
+  --muted: var(--ink-600);
+  --faint: var(--ink-400);
+
+  /* Type — six steps, no more. */
+  --fs-page: 30px;
+  --fs-section: 19px;
+  --fs-card: 16px;
+  --fs-body: 15px;
+  --fs-meta: 13px;
+  --fs-axis: 12px;
+  --fs-figure: 22px;
+
+  /* Brand green is unchanged. */
   --green: #237a4b;
   --green-dark: #17603a;
   --green-soft: #edf6ef;
@@ -12,7 +33,20 @@
   --level2: #80c977;
   --level3: #43a454;
   --level4: #237a3e;
-  --radius: 12px;
+
+  --radius: 10px;
+  --radius-control: 8px;
+  --radius-cell: 4px;
+  --sidebar: 224px;
+  --content: 1160px;
+}
+/* Every figure the eye compares down a column. */
+.figure,
+.tnum,
+.stat-card strong,
+.effort-figure,
+.goal-effort strong {
+  font-variant-numeric: tabular-nums;
 }
 * {
   box-sizing: border-box;
@@ -22,8 +56,9 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-vietnam), Arial, sans-serif;
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
 }
 button,
 input,
@@ -70,13 +105,14 @@ p {
   margin: 0;
 }
 h2 {
-  font-size: 16px;
-  font-weight: 650;
-  letter-spacing: -0.4px;
+  font-size: var(--fs-section);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 h3 {
-  font-size: 14px;
-  font-weight: 650;
+  font-size: var(--fs-card);
+  font-weight: 600;
+  letter-spacing: -0.005em;
 }
 button {
   border: 0;
@@ -90,7 +126,7 @@ svg {
   color: var(--muted) !important;
 }
 .small {
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .sr-only {
   position: absolute;
@@ -104,7 +140,7 @@ svg {
   min-height: 100vh;
 }
 .sidebar {
-  width: 230px;
+  width: var(--sidebar);
   background: #fff;
   border-right: 1px solid var(--line);
   position: fixed;
@@ -114,14 +150,14 @@ svg {
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  padding: 31px 18px 0;
+  padding: 24px 16px 0;
   z-index: 20;
 }
 .brand {
   display: flex;
   align-items: center;
   gap: 9px;
-  font-size: 26px;
+  font-size: 24px;
   letter-spacing: -1.6px;
   font-weight: 750;
   padding: 0 10px;
@@ -143,46 +179,92 @@ svg {
   color: var(--green);
 }
 nav[aria-label="Điều hướng chính"] {
-  margin-top: 34px;
+  display: grid;
+  gap: 2px;
+  margin-top: 26px;
 }
+/* A destination is a target you hit without aiming: 44px tall, full width. */
 .nav-item {
+  position: relative;
   width: 100%;
+  min-height: 44px;
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   text-align: left;
-  padding: 12px 12px;
-  margin: 4px 0;
-  border-radius: 7px;
-  color: #748078;
-  font-size: 13px;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  color: var(--ink-600);
+  font-size: var(--fs-body);
   font-weight: 500;
   white-space: nowrap;
 }
 .nav-item:hover {
-  background: #f4f7f4;
+  background: var(--surface-soft);
+  color: var(--ink-900);
 }
 .nav-item.active {
-  color: var(--green-dark);
+  color: var(--ink-900);
   background: var(--green-soft);
   font-weight: 600;
+}
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--green);
+}
+.nav-item.active svg {
+  color: var(--green-dark);
 }
 .nav-count {
   margin-left: auto;
   background: #fbe4d8;
   color: #a2451c;
   font-weight: 600;
-  font-size: 11px;
-  min-width: 20px;
-  padding: 0 5px;
+  font-size: var(--fs-meta);
+  min-width: 22px;
+  padding: 1px 6px;
   text-align: center;
-  border-radius: 5px;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+/* The sidebar's spare room is filled with the day, not with air. */
+.sidebar-today {
+  border-top: 1px solid var(--line);
+  margin: 16px -16px 0;
+  padding: 16px 16px 0;
+  display: grid;
+  gap: 4px;
+}
+.sidebar-today > span {
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
+}
+.sidebar-today strong {
+  font-size: var(--fs-figure);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.sidebar-today small {
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
+}
+.sidebar-today .button {
+  margin-top: 12px;
+  width: 100%;
 }
 .sidebar-setup,
 .sidebar-setup > span:first-child {
   display: flex;
   justify-content: space-between;
-  font-size: 0.75rem;
+  font-size: var(--fs-meta);
   font-weight: 600;
   color: #24506f;
 }
@@ -201,7 +283,7 @@ nav[aria-label="Điều hướng chính"] {
   background: #2f6ea3;
 }
 .sidebar-setup small {
-  font-size: 0.75rem;
+  font-size: var(--fs-meta);
   color: #3d6285;
 }
 .running-dot {
@@ -219,7 +301,7 @@ nav[aria-label="Điều hướng chính"] {
 }
 .settings-section {
   margin-top: 6px;
-  font-size: 0.8125rem;
+  font-size: var(--fs-meta);
   font-weight: 600;
   color: var(--green-dark);
 }
@@ -231,8 +313,8 @@ nav[aria-label="Điều hướng chính"] {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 15px -18px 0;
-  padding: 20px 18px;
+  margin: 16px -16px 0;
+  padding: 16px;
 }
 .avatar {
   width: 33px;
@@ -257,15 +339,16 @@ nav[aria-label="Điều hướng chính"] {
   overflow: hidden;
 }
 .account strong {
-  font-size: 12px;
+  font-size: var(--fs-meta);
+  font-weight: 600;
 }
 .account div > span {
-  font-size: 10px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   margin-top: 2px;
 }
 .workspace {
-  margin-left: 230px;
+  margin-left: var(--sidebar);
 }
 .topbar {
   height: 73px;
@@ -280,8 +363,8 @@ nav[aria-label="Điều hướng chính"] {
   display: flex;
   align-items: center;
   gap: 15px;
-  font-size: 12px;
-  color: #8c958d;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
 }
 .breadcrumb strong {
   font-weight: 500;
@@ -293,8 +376,8 @@ nav[aria-label="Điều hướng chính"] {
   gap: 23px;
 }
 .today-label {
-  color: #7f8980;
-  font-size: 12px;
+  color: var(--ink-400);
+  font-size: var(--fs-meta);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -311,7 +394,7 @@ nav[aria-label="Điều hướng chính"] {
   border-radius: 999px;
   background: var(--green);
   color: #fff;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 600;
   box-shadow: 0 2px 3px #18382412;
 }
@@ -330,7 +413,7 @@ nav[aria-label="Điều hướng chính"] {
 }
 .focus-clock {
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   font-weight: 600;
 }
 .focus-title {
@@ -339,7 +422,7 @@ nav[aria-label="Điều hướng chính"] {
   white-space: nowrap;
 }
 .private-label {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   display: flex;
   gap: 6px;
   align-items: center;
@@ -348,9 +431,9 @@ nav[aria-label="Điều hướng chính"] {
   display: none !important;
 }
 .main-content {
-  max-width: 1660px;
+  max-width: var(--content);
   margin: auto;
-  padding: 28px 36px 0;
+  padding: 24px 32px 0;
 }
 .demo-banner {
   display: flex;
@@ -361,7 +444,7 @@ nav[aria-label="Điều hướng chính"] {
   background: #f2f8f1;
   border-radius: 8px;
   padding: 11px 16px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   margin-bottom: 28px;
   color: #65725f;
 }
@@ -374,7 +457,7 @@ nav[aria-label="Điều hướng chính"] {
   display: inline-flex;
   gap: 5px;
   align-items: center;
-  font-size: 10px;
+  font-size: var(--fs-meta);
   font-weight: 600;
   line-height: 1.6;
   background: #e3eddf;
@@ -386,41 +469,67 @@ nav[aria-label="Điều hướng chính"] {
 .badge.green {
   color: var(--green);
   background: #eaf5eb;
-  font-size: 10px;
+  font-size: var(--fs-meta);
   font-weight: 500;
 }
 .page-heading {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  gap: 22px;
-  margin: 6px 0 28px;
+  align-items: flex-start;
+  gap: 24px;
+  margin: 0 0 24px;
 }
+/* Kept only where it carries a state, never above a page title. */
 .eyebrow {
-  font-size: 10px;
-  letter-spacing: 1.7px;
+  font-size: var(--fs-meta);
+  letter-spacing: 0.06em;
   font-weight: 600;
-  color: #919b90;
+  color: var(--ink-400);
+}
+/* Numbers a reader compares get a row of their own, each under its own label,
+   instead of a chain of small print separated by dots. */
+.figure-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+  margin: 16px 0 0;
+}
+.figure-row > div {
+  display: grid;
+  gap: 2px;
+}
+.figure-row dt {
+  font-size: var(--fs-figure);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  color: var(--ink-900);
+  font-variant-numeric: tabular-nums;
+}
+.figure-row dd {
+  margin: 0;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
 }
 .page-heading h1 {
-  font-size: 32px;
-  letter-spacing: -1.35px;
-  line-height: 1.5;
-  font-weight: 650;
-  margin: 5px 0;
+  font-size: var(--fs-page);
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  font-weight: 600;
+  margin: 0;
 }
 .heading-dot {
   margin-left: 2px;
 }
 .page-heading p {
-  font-size: 13px;
-  color: var(--muted);
-  margin-top: 5px;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
+  margin-top: 6px;
 }
 .heading-actions {
   display: flex;
-  gap: 9px;
-  padding-top: 16px;
+  gap: 8px;
+  padding-top: 4px;
   flex-shrink: 0;
 }
 .button {
@@ -429,11 +538,11 @@ nav[aria-label="Điều hướng chính"] {
   align-items: center;
   justify-content: center;
   background: #fff;
-  border: 1px solid #dde4df;
-  border-radius: 7px;
-  min-height: 39px;
-  padding: 9px 13px;
-  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  min-height: 40px;
+  padding: 9px 14px;
+  font-size: var(--fs-body);
   font-weight: 500;
   white-space: nowrap;
   box-shadow: 0 1px 2px #19392004;
@@ -454,9 +563,9 @@ nav[aria-label="Điều hướng chính"] {
   background: var(--green-dark);
 }
 .button.small-button {
-  min-height: 32px;
-  padding: 5px 10px;
-  font-size: 11px;
+  min-height: 34px;
+  padding: 6px 11px;
+  font-size: var(--fs-meta);
 }
 .text-button {
   display: inline-flex;
@@ -464,8 +573,8 @@ nav[aria-label="Điều hướng chính"] {
   gap: 6px;
   padding: 0;
   color: var(--green);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--fs-meta);
+  font-weight: 600;
   text-align: left;
 }
 .text-button:hover {
@@ -475,11 +584,11 @@ nav[aria-label="Điều hướng chính"] {
 .icon-button {
   display: inline-grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 3px;
-  border-radius: 5px;
-  color: #8b948d;
+  border-radius: 6px;
+  color: var(--ink-400);
   flex-shrink: 0;
 }
 .icon-button:hover {
@@ -523,22 +632,22 @@ nav[aria-label="Điều hướng chính"] {
   color: #c99767;
 }
 .stat-card > div > span {
-  color: #7a837b;
-  font-size: 11px;
+  color: var(--ink-400);
+  font-size: var(--fs-meta);
   display: block;
   margin-top: 1px;
 }
 .stat-card strong {
   display: block;
-  font-size: 27px;
+  font-size: var(--fs-figure);
   line-height: 1.2;
   font-weight: 600;
   letter-spacing: -1px;
   margin-top: 9px;
 }
 .stat-card small {
-  font-size: 10px;
-  color: #949b94;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
   font-weight: 400;
   letter-spacing: 0;
   margin-left: 9px;
@@ -565,15 +674,15 @@ nav[aria-label="Điều hướng chính"] {
 }
 .section-heading p {
   margin-top: 5px;
-  font-size: 11px;
+  font-size: var(--fs-meta);
 }
 .count-badge {
-  font-size: 10px;
+  font-size: var(--fs-meta);
   letter-spacing: 0;
   font-weight: 400;
   background: #edf0ec;
   border: 1px solid #e3e8e2;
-  color: #7a8776;
+  color: var(--ink-400);
   border-radius: 4px;
   padding: 2px 6px;
   white-space: nowrap;
@@ -581,13 +690,14 @@ nav[aria-label="Điều hướng chính"] {
 .section-heading select,
 select {
   background: white;
-  border: 1px solid #dfe5df;
-  border-radius: 6px;
-  padding: 7px 10px;
-  color: #5d6a60;
-  font-size: 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 8px 11px;
+  color: var(--ink-600);
+  font-size: var(--fs-meta);
+  font-weight: 500;
   max-width: 100%;
-  min-height: 34px;
+  min-height: 40px;
 }
 .year-row {
   margin-bottom: 18px;
@@ -606,8 +716,8 @@ select {
   border: 1px solid #e0e6df;
   background: #f1f4f0;
   border-radius: 7px;
-  font-size: 11px;
-  color: #899483;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
   font-weight: 600;
 }
 .year-number.current {
@@ -621,12 +731,12 @@ select {
   align-items: center;
 }
 .year-label h3 {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 600;
 }
 .year-label > div > span {
-  font-size: 10px;
-  color: #9ba399;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
 }
 .semester-pair {
   display: grid;
@@ -653,18 +763,18 @@ select {
   margin-bottom: 16px;
 }
 .semester-heading h3 {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 600;
 }
 .semester-date {
-  font-size: 9px;
-  color: #95a090;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
   display: block;
   margin-top: 4px;
 }
 .semester-status {
-  font-size: 10px;
-  color: #9ba498;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
   padding-top: 1px;
 }
 .status-dot {
@@ -686,10 +796,14 @@ select {
 }
 .heatmap-inner {
   min-width: 270px;
-  /* One source of truth for the week axis: the heatmap, its month labels and
-     the rhythm chart below all read these. */
-  --axis-gutter: 21px;
-  --axis-gap: 3px;
+  /* One source of truth for the week axis. Month labels, day cells, the
+     weekday gutter and the rhythm chart below all derive from these two, so a
+     column cannot drift away from the label that names it. */
+  --axis-gutter: 24px;
+  --axis-gap: 2px;
+}
+.zoomed .heatmap-inner {
+  --axis-gap: 4px;
 }
 .month-labels {
   display: grid;
@@ -697,8 +811,8 @@ select {
   margin-left: var(--axis-gutter);
   gap: var(--axis-gap);
   margin-bottom: 7px;
-  font-size: 9px;
-  color: #899383;
+  font-size: var(--fs-axis);
+  color: var(--ink-400);
   line-height: 1;
 }
 .month-labels span {
@@ -716,9 +830,14 @@ select {
   flex-shrink: 0;
   display: grid;
   grid-template-rows: repeat(7, 1fr);
-  font-size: 8px;
-  color: #97a18f;
+  font-size: var(--fs-axis);
+  color: var(--ink-400);
   line-height: 1;
+}
+.weekday-labels span {
+  display: grid;
+  align-items: center;
+  justify-items: start;
 }
 .weekday-labels span:nth-child(1) {
   grid-row: 1;
@@ -743,7 +862,7 @@ select {
   aspect-ratio: 1;
   min-width: 0;
   padding: 0;
-  border-radius: 2px;
+  border-radius: var(--radius-cell);
   position: relative;
   border: 1px solid #19331704;
   transition: transform 0.1s;
@@ -791,8 +910,8 @@ select {
   border-top: 1px solid #f0f3ed;
   padding-top: 9px;
   margin-top: 11px;
-  color: #83917c;
-  font-size: 9px;
+  color: var(--ink-400);
+  font-size: var(--fs-meta);
 }
 .semester-footer > span {
   display: flex;
@@ -800,7 +919,7 @@ select {
   align-items: center;
 }
 .semester-footer .text-button {
-  font-size: 9px;
+  font-size: var(--fs-meta);
   font-weight: 400;
 }
 .future {
@@ -809,24 +928,94 @@ select {
 .future .heatmap {
   opacity: 0.6;
 }
+/* Four reminders, never squeezed onto one line. The rest is in the key. */
 .heatmap-legend {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
-  font-size: 10px;
-  color: #909a88;
-  margin-top: 3px;
+  gap: 8px 20px;
+  font-size: var(--fs-meta);
+  color: var(--ink-600);
+  margin-top: 12px;
 }
 .heatmap-legend > span {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 7px;
 }
 .heatmap-legend i {
-  width: 9px;
-  height: 9px;
+  width: 13px;
+  height: 13px;
   display: inline-block;
-  border-radius: 2px;
+  border-radius: 3px;
+}
+.legend-band {
+  background: #7c3aed26;
+  box-shadow: 0 2px 0 #7c3aed;
+}
+/* The key: one drawn sample per convention, in the styles the grid really uses. */
+.journey-key {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin: 12px 0 4px;
+}
+.journey-key > p {
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
+  margin-bottom: 12px;
+}
+.heatmap-key {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px 24px;
+  margin: 0;
+}
+.heatmap-key > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.heatmap-key dt {
+  flex: none;
+}
+.heatmap-key dd {
+  margin: 0;
+  font-size: var(--fs-body);
+  color: var(--ink-600);
+  line-height: 1.4;
+}
+.key-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-cell);
+  background: var(--level0);
+  font-size: var(--fs-axis);
+  font-weight: 600;
+  color: var(--ink-900);
+}
+.key-cell.today {
+  outline: 1.5px solid #507b5a;
+  outline-offset: 1px;
+}
+.key-cell.planned {
+  border: 1px dashed #536579;
+  background: #64748b1f;
+}
+.key-cell.band {
+  background: #7c3aed26;
+  box-shadow: 0 3px 0 #7c3aed;
+}
+.key-cell .deadline-corner,
+.key-cell .milestone-corner {
+  position: absolute;
+  inset: 0 0 auto auto;
+  width: 60%;
+  height: 60%;
 }
 .heatmap-legend .scale {
   margin-left: auto;
@@ -854,8 +1043,8 @@ select {
   gap: 10px;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
-  color: #919d89;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
 }
 .journey-footer svg {
   color: #94ac87;
@@ -869,22 +1058,22 @@ select {
 }
 .journey-card .section-heading {
   margin-bottom: 19px;
-  color: #7e9a71;
+  color: var(--ink-400);
 }
 .journey-card .eyebrow {
-  font-size: 9px;
-  color: #7d966f;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
   letter-spacing: 1.2px;
 }
 .journey-card h3 {
-  font-size: 18px;
+  font-size: var(--fs-section);
   font-weight: 600;
   letter-spacing: -0.5px;
   color: #3b5a35;
 }
 .journey-card p {
-  font-size: 10px;
-  color: #8a9b7c;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
   margin-top: 5px;
 }
 .progress-track {
@@ -907,19 +1096,19 @@ select {
 .journey-caption {
   display: flex;
   justify-content: space-between;
-  font-size: 9px;
-  color: #94a484;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
   margin-top: 8px;
 }
 .journey-caption strong {
-  font-size: 10px;
+  font-size: var(--fs-meta);
   color: #688857;
 }
 .rail-section {
   margin-bottom: 27px;
 }
 .rail-section h2 {
-  font-size: 14px;
+  font-size: var(--fs-body);
 }
 .rail-section .section-heading {
   margin-bottom: 6px;
@@ -946,25 +1135,25 @@ select {
   width: 42px;
   padding: 5px 0;
   text-align: center;
-  color: #738268;
+  color: var(--ink-400);
   flex-shrink: 0;
 }
 .deadline-date strong {
   display: block;
-  font-size: 18px;
+  font-size: var(--fs-section);
   font-weight: 550;
   line-height: 1.2;
 }
 .deadline-date span {
   display: block;
-  font-size: 8px;
+  font-size: var(--fs-meta);
   margin-top: 3px;
 }
 .deadline-content {
   flex: 1;
 }
 .deadline-content > strong {
-  font-size: 11px;
+  font-size: var(--fs-meta);
   line-height: 1.65;
   font-weight: 500;
   display: block;
@@ -973,8 +1162,8 @@ select {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 9px;
-  color: #9ba48f;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
   margin-top: 5px;
 }
 .deadline-content i {
@@ -992,7 +1181,7 @@ select {
   color: #bb684e !important;
 }
 .rail-link {
-  font-size: 10px;
+  font-size: var(--fs-meta);
   margin-top: 16px;
 }
 .recent-section {
@@ -1039,15 +1228,15 @@ select {
 }
 .recent-item strong {
   display: block;
-  font-size: 10px;
+  font-size: var(--fs-meta);
   font-weight: 450;
   line-height: 1.7;
   color: #69765f;
 }
 .recent-item div > span {
   display: block;
-  font-size: 9px;
-  color: #a1ab99;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
   margin-top: 3px;
 }
 .page-footer {
@@ -1057,19 +1246,19 @@ select {
   margin-top: 30px;
   border-top: 1px solid var(--line);
   padding: 20px 0;
-  color: #a0aa9a;
-  font-size: 9px;
+  color: var(--ink-400);
+  font-size: var(--fs-meta);
 }
 .page-footer > span:first-child {
-  font-size: 11px;
+  font-size: var(--fs-meta);
   font-weight: 600;
   letter-spacing: -0.3px;
 }
 .empty-small {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   padding: 24px 12px;
   text-align: center;
-  color: #97a08e;
+  color: var(--ink-400);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1119,7 +1308,7 @@ select {
 }
 .status-tabs button {
   padding: 12px 0;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   border-bottom: 2px solid transparent;
   white-space: nowrap;
@@ -1137,14 +1326,14 @@ select {
   border-radius: 7px;
   background: white;
   padding: 0 12px;
-  color: #9ba694;
+  color: var(--ink-400);
 }
 .search-field input {
   background: none;
   border: 0;
   width: 180px;
   padding: 10px 0;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--text);
 }
 .search-field input:focus {
@@ -1165,14 +1354,36 @@ select {
 .goals-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
+  align-items: stretch;
+  gap: 16px;
 }
 .goal-card {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background: white;
+  border-radius: var(--radius);
+  background: var(--surface);
   padding: 20px;
   min-width: 0;
+}
+/* The empty slot at the end of the grid, doing something useful. */
+.goal-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 160px;
+  border: 1px dashed #c8d0c8;
+  border-radius: var(--radius);
+  color: var(--ink-400);
+  font-size: var(--fs-body);
+  font-weight: 500;
+}
+.goal-add:hover {
+  border-color: var(--green);
+  color: var(--green-dark);
+  background: var(--green-soft);
 }
 .goal-top {
   display: flex;
@@ -1181,11 +1392,11 @@ select {
   margin-bottom: 16px;
 }
 .category {
-  font-size: 10px;
+  font-size: var(--fs-meta);
   border-radius: 4px;
   padding: 3px 7px;
   background: #eff5e9;
-  color: #7b916c;
+  color: var(--ink-400);
 }
 .category-1 {
   background: #f3eef8;
@@ -1212,7 +1423,7 @@ select {
   display: block;
   padding: 0;
   text-align: left;
-  font-size: 15px;
+  font-size: var(--fs-body);
   font-weight: 600;
   line-height: 1.65;
   overflow-wrap: anywhere;
@@ -1221,7 +1432,7 @@ select {
   color: var(--green);
 }
 .goal-description {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   margin-top: 8px;
   white-space: pre-wrap;
@@ -1230,13 +1441,13 @@ select {
 .progress-caption {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   margin: 22px 0 9px;
 }
 .progress-caption strong {
   color: #4c7348;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 500;
 }
 /* The hours come before the percentage: they are the part actually lived. */
@@ -1246,21 +1457,26 @@ select {
   margin-top: 16px;
 }
 .goal-effort > strong {
-  font-size: 20px;
+  font-size: var(--fs-figure);
   font-weight: 600;
   line-height: 1.3;
   font-variant-numeric: tabular-nums;
 }
 .goal-effort > strong.effort-empty {
-  font-size: 14px;
-  color: #8b9489;
+  font-size: var(--fs-body);
+  color: var(--ink-400);
 }
 .goal-effort > span {
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
-.effort-counts {
-  color: #8b9489 !important;
+/* Same figure row as the page header, one step down. */
+.figure-row.compact {
+  gap: 6px 24px;
+  margin-top: 12px;
+}
+.figure-row.compact dt {
+  font-size: var(--fs-card);
 }
 .week-strip {
   display: flex;
@@ -1286,7 +1502,7 @@ select {
   opacity: 0.85;
 }
 .effort-meta {
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   margin-top: 7px;
 }
@@ -1297,7 +1513,7 @@ select {
   border-radius: 8px;
   background: #f6f4ee;
   color: #7a6f57;
-  font-size: 11px;
+  font-size: var(--fs-meta);
   line-height: 1.55;
 }
 .goal-phase {
@@ -1306,14 +1522,14 @@ select {
   align-items: baseline;
   gap: 8px;
   margin-top: 12px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 500;
 }
 .goal-phase > span {
-  font-size: 9px;
+  font-size: var(--fs-meta);
   letter-spacing: 0.09em;
   font-weight: 600;
-  color: #9aa396;
+  color: var(--ink-400);
 }
 .goal-actions {
   display: flex;
@@ -1323,24 +1539,25 @@ select {
 .continue-button {
   min-height: 32px;
   padding: 6px 13px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .goal-bottom {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-top: 15px;
+  margin-top: auto;
+  padding-top: 16px;
 }
 .deadline {
   display: flex;
   gap: 6px;
   align-items: center;
-  color: #909985;
-  font-size: 11px;
+  color: var(--ink-400);
+  font-size: var(--fs-meta);
 }
 .done-label {
-  font-size: 10px;
+  font-size: var(--fs-meta);
   color: var(--green);
   display: flex;
   align-items: center;
@@ -1351,7 +1568,7 @@ select {
   color: #65915b;
 }
 .due-hint {
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: #b09964;
   margin-top: 8px;
 }
@@ -1372,12 +1589,12 @@ select {
   color: #9cb68f;
 }
 .empty-state h3 {
-  font-size: 19px;
+  font-size: var(--fs-section);
   color: #53654c;
 }
 .empty-state p {
   max-width: 400px;
-  font-size: 14px;
+  font-size: var(--fs-body);
 }
 .empty-state .button {
   margin-top: 8px;
@@ -1393,7 +1610,7 @@ select {
   align-items: center;
   gap: 8px;
   padding: 11px 0;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   border-bottom: 2px solid transparent;
   white-space: nowrap;
@@ -1404,59 +1621,99 @@ select {
   font-weight: 600;
 }
 .journal-section {
-  max-width: 1000px;
+  max-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 4px 20px 8px;
 }
+/* The day is a header, not a card: it sticks, and it says what the day came to. */
 .journal-date {
-  font-size: 12px;
-  font-weight: 500;
-  color: #87947d;
-  margin: 27px 0 13px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  color: var(--ink-600);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  margin: 0;
+  padding: 16px 0 8px;
 }
+.journal-date b {
+  font-weight: 600;
+  color: var(--ink-400);
+  font-variant-numeric: tabular-nums;
+}
+/* One row across the full width; the frame is a divider, not 999 boxes. */
 .journal-entry {
   display: flex;
-  gap: 15px;
-  align-items: flex-start;
-  background: white;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  padding: 20px;
-  margin: 10px 0;
+  gap: 12px;
+  align-items: baseline;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 0;
 }
-.journal-icon {
-  width: 39px;
-  height: 39px;
-  display: grid;
-  place-items: center;
-  border-radius: 9px;
-  background: #f1f4ed;
-  color: #98ab8b;
+.journal-entry:hover {
+  background: var(--surface-soft);
+  box-shadow:
+    -12px 0 var(--surface-soft),
+    12px 0 var(--surface-soft);
+}
+.entry-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
   flex-shrink: 0;
-}
-.journal-icon.green {
-  background: #e6f2df;
-  color: #669357;
+  transform: translateY(-1px);
 }
 .journal-entry > div:not(.row-actions) {
   flex: 1;
   min-width: 0;
 }
 .entry-kind {
-  font-size: 9px;
-  letter-spacing: 1px;
-  color: #94a586;
+  color: var(--green-dark);
+  font-weight: 600;
 }
 .journal-entry h3 {
-  font-size: 14px;
-  font-weight: 550;
+  font-size: var(--fs-card);
+  font-weight: 600;
   overflow-wrap: anywhere;
-  margin: 3px 0;
+  margin: 0;
+}
+.entry-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 2px;
 }
 .journal-entry p {
-  font-size: 13px;
-  color: var(--muted);
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  margin-top: 8px;
+  margin-top: 4px;
+}
+.entry-duration {
+  font-size: var(--fs-body);
+  font-weight: 500;
+  color: var(--ink-600);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+  min-width: 84px;
+}
+/* Editing is available, not advertised. */
+.journal-entry .row-actions {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.journal-entry:hover .row-actions,
+.journal-entry:focus-within .row-actions {
+  opacity: 1;
 }
 .load-more {
   display: flex;
@@ -1493,11 +1750,11 @@ select {
   align-items: center;
 }
 .dialog-heading h2 {
-  font-size: 20px;
+  font-size: var(--fs-section);
   font-weight: 600;
 }
 .dialog-description {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   margin: 10px 0 20px;
   line-height: 1.8;
 }
@@ -1511,7 +1768,7 @@ select {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 500;
   color: #61705b;
 }
@@ -1522,7 +1779,7 @@ select {
   padding: 10px 11px;
   border: 1px solid #dfe6db;
   border-radius: 7px;
-  font-size: 14px;
+  font-size: var(--fs-body);
   font-weight: 400;
   color: var(--text);
   background: #fff;
@@ -1530,8 +1787,8 @@ select {
 }
 .form input::placeholder,
 .form textarea::placeholder {
-  color: #abb4a4;
-  font-size: 12px;
+  color: var(--ink-400);
+  font-size: var(--fs-meta);
 }
 .form textarea {
   resize: vertical;
@@ -1554,7 +1811,7 @@ select {
   transform: translateY(-50%);
   width: 36px;
   height: 36px;
-  color: #687962;
+  color: var(--ink-400);
 }
 .form-row {
   display: flex;
@@ -1591,7 +1848,7 @@ input[type="range"] {
   background: #fff1ed;
   color: #b86349;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   overflow-wrap: anywhere;
 }
 .form-success {
@@ -1599,14 +1856,14 @@ input[type="range"] {
   background: #edf6e8;
   color: #5e8052;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .form-switch {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   border-top: 1px solid var(--line);
   padding-top: 16px;
@@ -1631,7 +1888,7 @@ input[type="range"] {
   padding: 12px 16px;
   border-radius: 10px;
   z-index: 70;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: #4e6d42;
 }
 .toast > span {
@@ -1648,8 +1905,8 @@ input[type="range"] {
   align-items: center;
   gap: 8px;
   margin: 20px 0 10px;
-  color: #637b57;
-  font-size: 13px;
+  color: var(--ink-400);
+  font-size: var(--fs-meta);
 }
 .day-list-item {
   width: 100%;
@@ -1660,7 +1917,7 @@ input[type="range"] {
   text-align: left;
   border-bottom: 1px solid var(--line);
   padding: 12px 0;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   overflow-wrap: anywhere;
 }
 .day-list-item strong {
@@ -1682,131 +1939,6 @@ input[type="range"] {
 }
 .nav-scrim {
   display: none;
-}
-/* Keep working text legible at regular and enlarged browser font settings. */
-body {
-  font-size: 1rem;
-}
-.nav-item,
-.page-heading p,
-.button,
-.text-button,
-.semester-heading h3,
-.goal-description,
-.journal-entry p,
-.form label,
-.form-error,
-.form-success,
-.form-switch,
-.dialog-description,
-.demo-banner {
-  font-size: 0.875rem;
-}
-.eyebrow,
-.semester-date,
-.semester-status,
-.semester-footer,
-.semester-footer .text-button,
-.month-labels,
-.weekday-labels,
-.heatmap-legend,
-.badge,
-.badge.green,
-.count-badge,
-.year-label > div > span,
-.year-number,
-.journey-card p,
-.journey-caption,
-.rail-link,
-.entry-kind,
-.page-footer,
-.deadline-content > span,
-.recent-item div > span {
-  font-size: 0.75rem;
-}
-.account strong,
-.today-label,
-.breadcrumb,
-.private-label,
-.stat-card > div > span,
-.stat-card small,
-.section-heading p,
-.journey-footer,
-.deadline-content > strong,
-.recent-item strong,
-.category,
-.deadline,
-.done-label,
-.progress-caption,
-.search-field input,
-.secondary-filters select,
-.status-tabs button,
-.form input::placeholder,
-.form textarea::placeholder {
-  font-size: 0.8125rem;
-}
-.year-label h3,
-.rail-section h2 {
-  font-size: 0.875rem;
-}
-.semester-date {
-  font-size: 0.6875rem;
-}
-.month-labels,
-.weekday-labels {
-  font-size: 0.625rem;
-}
-.semester-footer,
-.semester-footer .text-button {
-  font-size: 0.6875rem;
-}
-.stat-card {
-  gap: 10px;
-}
-.stat-card small {
-  display: block;
-  margin: 5px 0 0;
-}
-.semester-heading {
-  flex-wrap: wrap;
-}
-.heatmap-inner {
-  min-width: 260px;
-}
-.dashboard-columns {
-  grid-template-columns: minmax(0, 1fr) 258px;
-}
-.semester-pair {
-  gap: 12px;
-}
-.semester-card,
-.rhythm-panel {
-  padding: 15px 13px 11px;
-}
-.sidebar {
-  width: 234px;
-}
-.workspace {
-  margin-left: 234px;
-}
-.account div > span {
-  font-size: 0.6875rem;
-}
-.goal-description {
-  font-size: 0.875rem;
-}
-.main-content {
-  padding-left: 30px;
-  padding-right: 30px;
-}
-.weekday-labels {
-  width: 18px;
-}
-.month-labels {
-  margin-left: 24px;
-}
-.heatmap {
-  gap: 3px;
 }
 @media (min-width: 1600px) {
   .main-content {
@@ -1852,7 +1984,7 @@ body {
     font-size: 23px;
   }
   .sidebar .nav-item {
-    font-size: 0.75rem;
+    font-size: var(--fs-meta);
     gap: 8px;
   }
   .account {
@@ -1888,7 +2020,7 @@ body {
     padding: 16px 12px;
   }
   .stat-card > div > span {
-    font-size: 0.75rem;
+    font-size: var(--fs-meta);
   }
   .stat-icon {
     width: 30px;
@@ -1979,15 +2111,15 @@ body {
     flex-wrap: nowrap;
   }
   .semester-date {
-    font-size: 0.75rem;
+    font-size: var(--fs-meta);
   }
   .semester-footer,
   .semester-footer .text-button {
-    font-size: 0.75rem;
+    font-size: var(--fs-meta);
   }
   .month-labels,
   .weekday-labels {
-    font-size: 0.75rem;
+    font-size: var(--fs-axis);
   }
   .year-label {
     margin-bottom: 13px;
@@ -2047,7 +2179,7 @@ body {
     display: none;
   }
   .breadcrumb strong {
-    font-size: 0.75rem;
+    font-size: var(--fs-meta);
   }
   .main-content {
     padding: 20px 18px 0;
@@ -2060,7 +2192,7 @@ body {
     font-size: 28px;
   }
   .page-heading p {
-    font-size: 0.8125rem;
+    font-size: var(--fs-meta);
   }
   .heading-actions {
     flex-direction: row;
@@ -2068,7 +2200,7 @@ body {
   }
   .heading-actions .button {
     flex: 1;
-    font-size: 0.8125rem;
+    font-size: var(--fs-meta);
   }
   .stats-grid {
     margin-bottom: 26px;
@@ -2080,7 +2212,7 @@ body {
     align-items: center;
   }
   .stat-card > div > span {
-    font-size: 0.6875rem;
+    font-size: var(--fs-meta);
   }
   .stat-card strong {
     font-size: 23px;
@@ -2089,7 +2221,7 @@ body {
   .stat-card small {
     display: block;
     margin: 4px 0 0;
-    font-size: 0.6875rem;
+    font-size: var(--fs-meta);
   }
   .stat-icon {
     width: 30px;
@@ -2098,21 +2230,21 @@ body {
   }
   .demo-banner {
     padding: 12px;
-    font-size: 0.75rem;
+    font-size: var(--fs-meta);
     margin-bottom: 23px;
   }
   .demo-banner .badge {
-    font-size: 0.625rem;
+    font-size: var(--fs-meta);
   }
   .section-heading h2 {
-    font-size: 15px;
+    font-size: var(--fs-body);
   }
   .section-heading select {
-    font-size: 0.6875rem;
+    font-size: var(--fs-meta);
     min-width: 111px;
   }
   .section-heading p {
-    font-size: 0.75rem;
+    font-size: var(--fs-meta);
     max-width: 215px;
   }
   .semester-pair {
@@ -2126,25 +2258,25 @@ body {
     min-width: 270px;
   }
   .semester-heading h3 {
-    font-size: 14px;
+    font-size: var(--fs-body);
   }
   .semester-date {
-    font-size: 11px;
+    font-size: var(--fs-meta);
   }
   .month-labels,
   .weekday-labels {
-    font-size: 10px;
+    font-size: var(--fs-axis);
   }
   .heatmap-legend {
     gap: 10px;
-    font-size: 10px;
+    font-size: var(--fs-axis);
   }
   .heatmap-legend i {
     width: 8px;
     height: 8px;
   }
   .journey-footer {
-    font-size: 11px;
+    font-size: var(--fs-meta);
     padding: 14px 8px;
   }
   .right-column {
@@ -2173,14 +2305,14 @@ body {
     max-width: 100%;
   }
   .status-tabs button {
-    font-size: 12px;
+    font-size: var(--fs-meta);
   }
   .journal-entry {
     padding: 15px;
     gap: 12px;
   }
   .journal-entry h3 {
-    font-size: 13px;
+    font-size: var(--fs-meta);
   }
   .journal-entry .row-actions {
     flex-direction: column;
@@ -2190,7 +2322,7 @@ body {
     height: 32px;
   }
   .page-footer {
-    font-size: 9px;
+    font-size: var(--fs-meta);
     gap: 16px;
   }
   .page-footer > span:first-child {
@@ -2200,19 +2332,19 @@ body {
     padding: 23px;
   }
   .dialog-heading h2 {
-    font-size: 19px;
+    font-size: var(--fs-section);
   }
   .form-row {
     gap: 12px;
   }
   .form-actions .button {
-    font-size: 12px;
+    font-size: var(--fs-meta);
   }
   .account {
     padding-bottom: 24px;
   }
   .section-heading .badge {
-    font-size: 11px;
+    font-size: var(--fs-meta);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2275,12 +2407,12 @@ body {
   min-width: 0;
 }
 .split-menu strong {
-  font-size: 0.8125rem;
+  font-size: var(--fs-meta);
   font-weight: 600;
 }
 .split-menu small {
-  font-size: 0.75rem;
-  color: #6d7d69;
+  font-size: var(--fs-meta);
+  color: var(--ink-400);
 }
 .split-menu button:hover:not(:disabled),
 .split-menu button:focus-visible {
@@ -2324,17 +2456,17 @@ body {
   min-width: 0;
 }
 .goal-picker strong {
-  font-size: 0.8125rem;
+  font-size: var(--fs-meta);
   font-weight: 600;
 }
 .goal-picker small {
-  font-size: 0.75rem;
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
 .tab-count {
   margin-left: 6px;
   font-variant-numeric: tabular-nums;
-  color: #97a294;
+  color: var(--ink-400);
 }
 .status-tabs button.selected .tab-count {
   color: var(--green);

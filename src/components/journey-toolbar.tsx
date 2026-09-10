@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { CircleHelp } from "lucide-react";
+import HeatmapKey from "./heatmap-key";
 import type { Goal, Profile, Semester } from "@/lib/timeline";
 import { showJourneyIntro } from "@/lib/journey-view";
 
@@ -166,7 +167,13 @@ export default function JourneyToolbar({
           </button>
         )}
       </div>
-      {(intro || help) && <p className="muted small journey-intro">{HELP}</p>}
+      {intro && !help && <p className="muted small journey-intro">{HELP}</p>}
+      {help && (
+        <div className="journey-key" role="group" aria-label="Cách đọc lưới">
+          <p>{HELP}</p>
+          <HeatmapKey />
+        </div>
+      )}
     </>
   );
 }

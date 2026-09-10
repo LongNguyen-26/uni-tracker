@@ -86,12 +86,14 @@ import { milestonesOnDay, datedMilestones } from "@/lib/milestones";
 import SemesterRhythm from "./semester-rhythm";
 import {
   activityLabel,
+  compactMinutes,
   formatMinutes,
   isWork,
   summarizeDays,
   type DaySummary,
 } from "@/lib/focus";
 import {
+  dayEffort,
   goalJourney,
   isAway,
   orderGoals,
@@ -170,7 +172,7 @@ function SemesterCard({
         <div>
           <h3>
             <button className="text-button" onClick={onOpen}>
-              {semester.label} {zoomed ? "" : "↗"}
+              {semester.label}
             </button>
           </h3>
           <span className="semester-date">
@@ -420,17 +422,22 @@ function GoalCard({
                   ? "đã dồn vào trước khi hoàn thành"
                   : "đã dồn vào mục tiêu này"}
               </span>
-              <span className="effort-counts">
-                {journey.activeDays} ngày có mặt
-                <i className="meta-sep" />
-                {journey.sessions} phiên
+              <dl className="figure-row compact">
+                <div>
+                  <dt>{journey.activeDays}</dt>
+                  <dd>ngày có mặt</dd>
+                </div>
+                <div>
+                  <dt>{journey.sessions}</dt>
+                  <dd>phiên</dd>
+                </div>
                 {journey.streak >= 2 && (
-                  <>
-                    <i className="meta-sep" />
-                    chuỗi {journey.streak} ngày
-                  </>
+                  <div>
+                    <dt>{journey.streak}</dt>
+                    <dd>ngày liên tục</dd>
+                  </div>
                 )}
-              </span>
+              </dl>
             </>
           ) : (
             <>
@@ -850,6 +857,7 @@ export default function Tracker() {
     .sort((a, b) => a.scheduled_start.localeCompare(b.scheduled_start));
   const nextToday =
     todaySessions.find((s) => s.status === "paused") || todaySessions[0];
+  const todayEffort = dayEffort(activities, today);
   const journeys = useMemo(() => {
     const map = new Map<string, GoalJourney>();
     for (const goal of goals)
@@ -1191,6 +1199,16 @@ export default function Tracker() {
         .toLocaleLowerCase("vi")
         .includes(query.toLocaleLowerCase("vi")),
   );
+  // Each day header carries what that day added up to, so scrolling the
+  // journal answers "how much" without opening anything.
+  const journalDayMinutes = new Map<string, number>();
+  for (const a of filteredActivities) {
+    if (!isWork(a) || Number(a.duration_minutes) <= 0) continue;
+    journalDayMinutes.set(
+      a.occurred_on,
+      (journalDayMinutes.get(a.occurred_on) || 0) + Number(a.duration_minutes),
+    );
+  }
   const dayActivities = selectedDay
     ? recent.filter((a) => a.occurred_on === selectedDay)
     : [];
@@ -1311,6 +1329,36 @@ export default function Tracker() {
             </small>
           </button>
         )}
+        {/* The day so far, then the one act that changes it. Room in the rail
+            is filled with something to do, not with space. */}
+        <div className="sidebar-today">
+          <span>Hôm nay</span>
+          <strong>
+            {todayEffort.minutes > 0
+              ? formatMinutes(todayEffort.minutes)
+              : "Chưa ghi giờ"}
+          </strong>
+          <small>
+            {todayEffort.sessions > 0
+              ? `${todayEffort.sessions} phiên đã ghi`
+              : "Bắt đầu để hôm nay có gì đó"}
+          </small>
+          <button
+            className="button primary"
+            onClick={() =>
+              !user
+                ? setModal({ kind: "auth" })
+                : startHub.current?.start(
+                    nextToday
+                      ? { kind: "session", id: nextToday.id }
+                      : { kind: "now" },
+                  )
+            }
+          >
+            <Play size={16} />
+            {nextToday ? "Tiếp tục phiên" : "Bắt đầu phiên"}
+          </button>
+        </div>
         <div className="sidebar-bottom">
           <button
             className="nav-item"
@@ -1493,13 +1541,6 @@ export default function Tracker() {
           )}
           <div className="page-heading" hidden={view === "planning"}>
             <div>
-              <div className="eyebrow">
-                {view === "goals"
-                  ? "MỖI MỤC TIÊU, MỘT BƯỚC TIẾN"
-                  : journeyTab === "journal"
-                    ? "NHỮNG ĐIỀU ĐÁNG NHỚ"
-                    : "NHÌN LẠI ĐỂ TIẾN XA HƠN"}
-              </div>
               <h1>
                 {view === "goals"
                   ? "Mục tiêu của tôi"
@@ -1508,33 +1549,40 @@ export default function Tracker() {
                     : "Hành trình đại học"}
                 <span className="heading-dot">.</span>
               </h1>
-              <p>
-                {view === "timeline" &&
-                journeyTab === "map" &&
-                shownSemester &&
-                termMeta ? (
-                  <>
+              {/* Context reads as one quiet line; the numbers worth comparing
+                  get their own row instead of a chain of small print. */}
+              {view === "timeline" && journeyTab === "map" && shownSemester && termMeta ? (
+                <>
+                  <p>
                     Năm {shownSemester.year} · học kỳ {shownSemester.term} ·
                     tuần {termMeta.week}/{termMeta.weeks}
-                    <i className="meta-sep" />
-                    {formatMinutes(termMeta.minutes)} đã ghi
-                    <i className="meta-sep" />
-                    {termMeta.days} ngày có hoạt động
+                  </p>
+                  <dl className="figure-row">
+                    <div>
+                      <dt>{compactMinutes(termMeta.minutes)}</dt>
+                      <dd>đã ghi kỳ này</dd>
+                    </div>
+                    <div>
+                      <dt>{termMeta.days}</dt>
+                      <dd>ngày có học</dd>
+                    </div>
                     {termMeta.current && (
-                      <>
-                        <i className="meta-sep" />
-                        chuỗi {streak(workActivities, today)} ngày
-                      </>
+                      <div>
+                        <dt>{streak(workActivities, today)}</dt>
+                        <dd>ngày liên tục</dd>
+                      </div>
                     )}
-                  </>
-                ) : view === "goals" ? (
-                  "Biến những dự định thành những điều đã làm được."
-                ) : journeyTab === "journal" ? (
-                  "Lưu lại từng ngày bạn đã học hỏi, trải nghiệm và trưởng thành."
-                ) : (
-                  `${profile?.study_years || 4} năm, ${(profile?.study_years || 4) * 2} học kỳ — và những bước tiến của bạn.`
-                )}
-              </p>
+                  </dl>
+                </>
+              ) : (
+                view === "timeline" &&
+                journeyTab === "map" && (
+                  <p>
+                    {profile?.study_years || 4} năm ·{" "}
+                    {(profile?.study_years || 4) * 2} học kỳ
+                  </p>
+                )
+              )}
             </div>
             {(view === "goals" ||
               (view === "timeline" && journeyTab === "journal")) && (
@@ -1677,32 +1725,42 @@ export default function Tracker() {
                                 list[index - 1].occurred_on !==
                                   activity.occurred_on) && (
                                 <h3 className="journal-date">
-                                  {activity.occurred_on === today
-                                    ? "Hôm nay"
-                                    : formatDate(activity.occurred_on, true)}
+                                  <span>
+                                    {activity.occurred_on === today
+                                      ? "Hôm nay"
+                                      : formatDate(activity.occurred_on, true)}
+                                  </span>
+                                  {journalDayMinutes.get(activity.occurred_on) ? (
+                                    <b>
+                                      {compactMinutes(
+                                        journalDayMinutes.get(
+                                          activity.occurred_on,
+                                        ) || 0,
+                                      )}
+                                    </b>
+                                  ) : null}
                                 </h3>
                               )}
+                              {/* One row, using the full width: a colour for the
+                                  goal, the title, and the number the eye scans. */}
                               <article className="journal-entry">
                                 <span
-                                  className={`journal-icon ${activity.kind === "completion" ? "green" : ""}`}
-                                  style={{
-                                    color: activity.color,
-                                    background: `${activity.color}18`,
-                                  }}
-                                >
-                                  {activity.kind === "completion" ? (
-                                    <CircleCheck size={20} />
-                                  ) : (
-                                    <BookOpen size={20} />
-                                  )}
-                                </span>
+                                  className="entry-dot"
+                                  style={{ background: activity.color }}
+                                  aria-hidden="true"
+                                />
                                 <div>
-                                  <span className="entry-kind">
+                                  <h3>
                                     {activity.is_milestone ? "★ " : ""}
-                                    {activityLabel(activity)}
-                                  </span>
-                                  <h3>{activity.title}</h3>
-                                  <p className="activity-meta">
+                                    {activity.title}
+                                  </h3>
+                                  <p className="entry-context">
+                                    {activityLabel(activity) !==
+                                      "Hoạt động" && (
+                                      <span className="entry-kind">
+                                        {activityLabel(activity)}
+                                      </span>
+                                    )}
                                     {activity.goal_title && (
                                       <span>
                                         {goals.find(
@@ -1710,16 +1768,14 @@ export default function Tracker() {
                                         )?.title || activity.goal_title}
                                       </span>
                                     )}
-                                    {activity.duration_minutes > 0 && (
-                                      <strong>
-                                        {formatMinutes(
-                                          activity.duration_minutes,
-                                        )}
-                                      </strong>
-                                    )}
                                   </p>
                                   {activity.notes && <p>{activity.notes}</p>}
                                 </div>
+                                <span className="entry-duration">
+                                  {activity.duration_minutes > 0
+                                    ? formatMinutes(activity.duration_minutes)
+                                    : ""}
+                                </span>
                                 {
                                   <div className="row-actions">
                                     <button
@@ -1911,6 +1967,8 @@ export default function Tracker() {
                                 </div>
                               ))}
                           </div>
+                          {/* Four reminders inline; the full set of conventions
+                              lives in the key behind the ⓘ, drawn not described. */}
                           <div className="heatmap-legend">
                             <span>
                               <i className="legend-today" />
@@ -1921,29 +1979,14 @@ export default function Tracker() {
                               Có deadline
                             </span>
                             <span>
-                              <b>◆</b> Cột mốc
-                            </span>
-                            <span>
-                              <b>G / C</b> Thi GK / CK
-                            </span>
-                            <span>
-                              <b>★</b> Đã đạt
-                            </span>
-                            <span>
-                              <i className="legend-planned" />
-                              Dự định
-                            </span>
-                            <span>
                               <i className="legend-split" />
                               Giờ đã làm
                             </span>
-                            <span>▧ Khoảng sự kiện</span>
+                            <span>
+                              <i className="legend-band" />
+                              Khoảng sự kiện
+                            </span>
                           </div>
-                          <p className="muted small heatmap-help">
-                            Màu mục tiêu, đậm theo giờ đã log · Viền đứt: phiên
-                            dự định · Dấu góc: hạn đã chốt · Nền dải tuần:
-                            khoảng sự kiện (viền đứt khi ngày chưa chốt).
-                          </p>
                           {shownSemester && (
                             <SemesterRhythm
                               semester={shownSemester}
@@ -2182,6 +2225,17 @@ export default function Tracker() {
                     </div>
                     <div className="goals-grid">
                       {filteredGoals.map(renderGoal)}
+                      {/* The gap at the end of the last row is the one place an
+                          invitation costs nothing. */}
+                      {filteredGoals.length > 0 && (
+                        <button
+                          className="goal-add"
+                          onClick={() => openWrite({ kind: "goal" })}
+                        >
+                          <Plus size={20} />
+                          Thêm mục tiêu
+                        </button>
+                      )}
                     </div>
                     {!filteredGoals.length && (
                       <div className="empty-state">
