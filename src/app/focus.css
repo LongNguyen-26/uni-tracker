@@ -203,6 +203,9 @@
   justify-content: center;
   container-type: inline-size;
 }
+/* A mark drawn inside its cell, not text: it scales with the cell so it stays
+   a recognisable shape at every zoom level. The first declaration is only the
+   fallback for browsers without container query units. */
 .day-cell > span {
   font-family: Arial, sans-serif;
   color: #fff;

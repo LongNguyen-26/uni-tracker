@@ -581,7 +581,9 @@
 .import-table {
   border-collapse: collapse;
   width: 100%;
-  min-width: 740px;
+  /* Widened with the type: the review table scrolls, but its columns should
+     not have to clip a select to fit. */
+  min-width: 820px;
   font-size: var(--fs-meta);
 }
 .import-table th {
@@ -624,10 +626,10 @@
   min-width: 210px;
 }
 .import-table td:nth-child(3) {
-  width: 145px;
+  width: 160px;
 }
 .import-table td:nth-child(4) {
-  width: 105px;
+  width: 118px;
 }
 .import-table td:nth-child(5) {
   max-width: 180px;

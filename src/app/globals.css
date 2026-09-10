@@ -1306,13 +1306,16 @@ select {
   display: flex;
   border-bottom: 1px solid var(--line);
   gap: 20px;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 .status-tabs button {
   padding: 12px 0;
-  font-size: var(--fs-meta);
-  color: var(--muted);
+  font-size: var(--fs-body);
+  color: var(--ink-600);
   border-bottom: 2px solid transparent;
   white-space: nowrap;
+  flex: none;
 }
 .status-tabs button.selected {
   border-color: var(--green);
@@ -1346,11 +1349,13 @@ select {
 .secondary-filters {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-bottom: 20px;
 }
 .secondary-filters > span {
   margin-left: auto;
+  white-space: nowrap;
 }
 .goals-grid {
   display: grid;
@@ -1973,25 +1978,8 @@ input[type="range"] {
   }
 }
 @media (max-width: 1250px) {
-  .sidebar {
-    width: 205px;
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-  .workspace {
-    margin-left: 205px;
-  }
   .sidebar .brand {
-    font-size: 23px;
-  }
-  .sidebar .nav-item {
-    font-size: var(--fs-meta);
-    gap: 8px;
-  }
-  .account {
-    margin-left: -12px;
-    margin-right: -12px;
-    padding: 16px 12px;
+    font-size: 22px;
   }
   .main-content {
     padding-left: 23px;
@@ -2028,7 +2016,7 @@ input[type="range"] {
     height: 30px;
   }
   .stat-card strong {
-    font-size: 25px;
+    font-size: var(--fs-figure);
   }
   .journey-card {
     align-self: start;
@@ -2053,7 +2041,7 @@ input[type="range"] {
     margin-left: 8px;
   }
   .page-heading h1 {
-    font-size: 27px;
+    font-size: 26px;
   }
   .demo-banner {
     align-items: flex-start;
@@ -2140,7 +2128,7 @@ input[type="range"] {
   .sidebar {
     transform: translateX(-100%);
     transition: transform 0.2s;
-    width: 234px;
+    width: var(--sidebar);
   }
   .sidebar.open {
     transform: translateX(0);
@@ -2179,8 +2167,14 @@ input[type="range"] {
   .breadcrumb > svg {
     display: none;
   }
+  .breadcrumb {
+    min-width: 0;
+  }
   .breadcrumb strong {
     font-size: var(--fs-meta);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .main-content {
     padding: 20px 18px 0;
@@ -2190,10 +2184,7 @@ input[type="range"] {
     margin-bottom: 23px;
   }
   .page-heading h1 {
-    font-size: 28px;
-  }
-  .page-heading p {
-    font-size: var(--fs-meta);
+    font-size: 24px;
   }
   .heading-actions {
     flex-direction: row;

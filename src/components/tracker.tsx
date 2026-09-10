@@ -1551,7 +1551,10 @@ export default function Tracker() {
               </h1>
               {/* Context reads as one quiet line; the numbers worth comparing
                   get their own row instead of a chain of small print. */}
-              {view === "timeline" && journeyTab === "map" && shownSemester && termMeta ? (
+              {view === "timeline" &&
+              journeyTab === "map" &&
+              shownSemester &&
+              termMeta ? (
                 <>
                   <p>
                     Năm {shownSemester.year} · học kỳ {shownSemester.term} ·
@@ -1730,7 +1733,9 @@ export default function Tracker() {
                                       ? "Hôm nay"
                                       : formatDate(activity.occurred_on, true)}
                                   </span>
-                                  {journalDayMinutes.get(activity.occurred_on) ? (
+                                  {journalDayMinutes.get(
+                                    activity.occurred_on,
+                                  ) ? (
                                     <b>
                                       {compactMinutes(
                                         journalDayMinutes.get(
