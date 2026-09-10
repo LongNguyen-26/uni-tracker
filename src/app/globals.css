@@ -431,9 +431,9 @@ nav[aria-label="Điều hướng chính"] {
 .mobile-menu {
   display: none !important;
 }
-/* Two measures, by what the page is. A week and a list of goals are read down
-   a column, so they keep one; the journey map is a grid that gets narrower the
-   moment you take width away from it, so it keeps the room. */
+/* Two measures, by what the page is. The week, the goals and the journal are
+   read down a column and keep one; the journey map is a grid that gets narrower
+   the moment you take width away from it, so it keeps the room. */
 .main-content {
   max-width: var(--content);
   margin: auto;

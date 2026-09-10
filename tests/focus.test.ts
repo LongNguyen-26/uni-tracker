@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  compactMinutes,
+  wholeMinutes,
   dayBackground,
   formatMinutes,
   isWork,
@@ -109,7 +109,7 @@ test("completed milestones use a star without inflating focus, history retains d
     "2026-09-06",
   );
   assert.equal(report.allocation[0].title, "Archived IELTS");
-  assert.equal(formatMinutes(125), "2g 5p");
+  assert.equal(formatMinutes(125), "2 giờ 5 phút");
 });
 test("weekly rhythm shares the semester heatmap columns and keeps one stack order", () => {
   // Two full columns plus a short trailing one, with a leading blank pad cell.
@@ -200,21 +200,21 @@ test("weekly rhythm marks columns after today as future", () => {
   assert.equal(rhythm.peak, 60);
 });
 
-test("compact durations fit a figure slot", () => {
-  assert.equal(compactMinutes(0), "0p");
-  assert.equal(compactMinutes(45), "45p");
-  assert.equal(compactMinutes(60), "1g");
-  assert.equal(compactMinutes(3165), "52g 45p");
-  assert.equal(compactMinutes(-10), "0p");
+test("a figure slot rounds to the minute, in the same wording", () => {
+  assert.equal(wholeMinutes(0), "0 phút");
+  assert.equal(wholeMinutes(45), "45 phút");
+  assert.equal(wholeMinutes(60), "1 giờ");
+  assert.equal(wholeMinutes(3165), "52 giờ 45 phút");
+  assert.equal(wholeMinutes(-10), "0 phút");
+  // Seconds are rounded away here, unlike formatMinutes.
+  assert.equal(wholeMinutes(90.5), "1 giờ 31 phút");
 });
 
 test("durations are written one way, and a timer's seconds survive", () => {
-  assert.equal(formatMinutes(0), "0p");
-  assert.equal(formatMinutes(1 / 4), "15s");
-  assert.equal(formatMinutes(45), "45p");
-  assert.equal(formatMinutes(60), "1g");
-  assert.equal(formatMinutes(90.5), "1g 30p 30s");
-  assert.equal(formatMinutes(-5), "0p");
-  // The figure form is the same shape, rounded to the minute.
-  assert.equal(compactMinutes(90.5), "1g 31p");
+  assert.equal(formatMinutes(0), "0 phút");
+  assert.equal(formatMinutes(1 / 4), "15 giây");
+  assert.equal(formatMinutes(45), "45 phút");
+  assert.equal(formatMinutes(60), "1 giờ");
+  assert.equal(formatMinutes(90.5), "1 giờ 30 phút 30 giây");
+  assert.equal(formatMinutes(-5), "0 phút");
 });

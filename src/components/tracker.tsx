@@ -88,7 +88,7 @@ import { milestonesOnDay, datedMilestones } from "@/lib/milestones";
 import SemesterRhythm from "./semester-rhythm";
 import {
   activityLabel,
-  compactMinutes,
+  wholeMinutes,
   formatMinutes,
   isWork,
   summarizeDays,
@@ -1509,12 +1509,15 @@ export default function Tracker() {
             )}
           </div>
         </header>
-        {/* The two working pages read better in a column; the journey is a map
-            and wants the width. One attribute, two measures. */}
+        {/* Only the map is a grid that needs every pixel of width. The week,
+            the goals and the journal are all read down a column, so they keep
+            the narrower measure. */}
         <main
           id="main"
           className="main-content"
-          data-view={view === "timeline" ? "map" : "column"}
+          data-view={
+            view === "timeline" && journeyTab === "map" ? "map" : "column"
+          }
         >
           {preset && (
             <div className="term-confirm">
@@ -1570,7 +1573,7 @@ export default function Tracker() {
                   </p>
                   <dl className="figure-row">
                     <div>
-                      <dt>{compactMinutes(termMeta.minutes)}</dt>
+                      <dt>{wholeMinutes(termMeta.minutes)}</dt>
                       <dd>đã ghi kỳ này</dd>
                     </div>
                     <div>
@@ -1745,7 +1748,7 @@ export default function Tracker() {
                                     activity.occurred_on,
                                   ) ? (
                                     <b>
-                                      {compactMinutes(
+                                      {wholeMinutes(
                                         journalDayMinutes.get(
                                           activity.occurred_on,
                                         ) || 0,

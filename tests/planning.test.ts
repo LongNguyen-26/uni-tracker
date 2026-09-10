@@ -104,7 +104,7 @@ test("timer is based on elapsed wall time, excludes paused time and runs past th
   // Three hours on a one-hour plan is three hours; the plan does not clamp it.
   assert.equal(sessionElapsed(s, Date.parse("2026-09-07T04:00:00Z")), 11400);
   assert.equal(clockText(3600), "01:00:00");
-  assert.equal(formatMinutes(1 / 6), "10s");
+  assert.equal(formatMinutes(1 / 6), "10 giây");
 });
 test("weekly repeats skip configured holidays and reject invalid intervals", () => {
   const s: SessionInput = {

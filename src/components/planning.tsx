@@ -38,7 +38,7 @@ import {
   type Goal,
   type Profile,
 } from "@/lib/timeline";
-import { compactMinutes, formatMinutes, isWork } from "@/lib/focus";
+import { wholeMinutes, formatMinutes, isWork } from "@/lib/focus";
 import { goalJourney, lastWorkedGoal } from "@/lib/journey";
 import {
   COUNTDOWN_PRESETS,
@@ -374,15 +374,15 @@ export default function PlanningHub({
               <h1>Tuần của bạn</h1>
               <dl className="figure-row">
                 <div>
-                  <dt>{compactMinutes(capacity.available)}</dt>
+                  <dt>{wholeMinutes(capacity.available)}</dt>
                   <dd>còn trống</dd>
                 </div>
                 <div>
                   <dt>{weekly.length}</dt>
-                  <dd>phiên đã đặt · {compactMinutes(planned)}</dd>
+                  <dd>phiên đã đặt · {wholeMinutes(planned)}</dd>
                 </div>
                 <div>
-                  <dt>{compactMinutes(actual)}</dt>
+                  <dt>{wholeMinutes(actual)}</dt>
                   <dd>đã ghi tuần này</dd>
                 </div>
               </dl>
@@ -517,9 +517,9 @@ export default function PlanningHub({
                         />
                         {g.title}
                       </th>
-                      <td>{compactMinutes(budget)}</td>
-                      <td>{compactMinutes(actual)}</td>
-                      <td>{compactMinutes(Math.max(0, budget - actual))}</td>
+                      <td>{wholeMinutes(budget)}</td>
+                      <td>{wholeMinutes(actual)}</td>
+                      <td>{wholeMinutes(Math.max(0, budget - actual))}</td>
                     </tr>
                   );
                 })}
