@@ -117,6 +117,69 @@ affected environment, not just a redeploy of another one.
   `uni-tracker-preview`, so no disposable account can sign in there; those paths are covered by the
   unit tests and by the local build only.
 
+### Preview release `748d8f0` — 2026-09-10 (UI refresh, branch only)
+
+- Branch `refactor/ui-v2` only. Nothing merged to `main`; production still runs `fef32b5`.
+- Scope is `docs/ui-refresh.md`: typography, hierarchy, spacing, alignment, density. No route,
+  schema, RLS or RPC change, and no change to what any feature does. Three new pure helpers
+  (`dayEffort`, `compactMinutes`, `axisWindow`) with tests; everything else is presentation.
+- **Tokens.** Six type steps (30/19/16/15/13/12) and three ink levels (`--ink-900` `#14181f`,
+  `--ink-600` `#4a5361`, `--ink-400` `#6b7482`) live in `:root`. No rule carries text below 13px
+  except axis labels at 12px, and no grey lighter than `--ink-400` carries text. Brand green,
+  `GOAL_COLORS` and `isGreen()` are untouched.
+- **Removed duplication.** A 125-line block of top-level overrides near the end of `globals.css`
+  had been restating font sizes and layout metrics declared earlier in the same file — including
+  the sidebar width and the heatmap's axis gutter — so the declared value was never the effective
+  one. It is folded into the rules it overrode.
+- **A — sidebar.** 224px, nav rows 44px tall at 15px/500 with a 3px active bar. A "Hôm nay" block
+  (time logged today, sessions, one button to start) sits under a divider; the user block stays at
+  the bottom. *Not met:* the brief's "no continuous vertical whitespace > 120px" — with the user
+  block pinned to the bottom, roughly 380px of rail is still empty on a 900px-tall window. Filling
+  it needs content the brief did not specify.
+- **B — heatmap.** Month labels and day cells derive from one pair of axis variables, so every
+  month label's left edge matches its column's first cell to 0.00px, at every width. The legend
+  keeps four inline reminders at 13px with wrapping; the prose line listing twelve conventions is
+  gone, replaced by a key behind the ⓘ that draws each sample as a real 18px cell. Per-cell hover
+  detail (date, total, goals, deadlines) was already carried by the cell's `title`.
+- **C — week picker.** One row: step back, the whole week inside the trigger
+  ("Tuần 07/09 – 13/09/2026"), step forward, today. All four controls measure 40px on one baseline.
+- **D — week grid.** `axisWindow` picks the hours the week actually uses (an hour either side of
+  the work, never narrower than 08:00–20:00) with a "Hiện 24 giờ" toggle. An empty week renders a
+  420px grid carrying "N hoạt động chưa được xếp giờ" and "Xếp vào khoảng trống" instead of ~700px
+  of ruled nothing. Unscheduled cards moved into a 260px column beside the grid, and the weekly
+  budgets became a four-column table with right-aligned tabular figures.
+- **E — journal.** Full-width rows: goal-coloured dot, title at 16/600, duration right-aligned in
+  tabular figures, edit and delete on hover. The per-row "Hoạt động" label and the 999 identical
+  bordered cards are gone; day headers stick and carry that day's total. Kind labels survive only
+  where they differ (completion, milestone, progress).
+- **F — goals.** Cards stretch to a common height with the action row on the floor
+  (499/499/499 measured), counts become small labelled figures, and the gap at the end of the grid
+  is an add-goal cell.
+- Fixed in passing: `formatDate` produced "07-09" without a year and "13/09/2026" with one, because
+  the vi-VN locale formatter switches separators when the year is omitted. Ranges such as
+  "22-06 – 04/10/2026" mixed both. It now formats the date itself; covered by a test.
+- Validation on `748d8f0`: 85 unit tests, typecheck, lint, prettier (on the files this branch
+  touched) and the production build pass. `src/lib/timer.ts` fails `prettier --check` on `main`
+  as well and was left alone; prettier is not in `devDependencies` and `npm run lint` is eslint only.
+- Preview READY: `dpl_DD2DZVyZQ8rnynNTyztzZVcDGqZ6` for
+  `748d8f076f7516ddd7d5d3edd1c954a44137233f`, branch alias assigned, no alias error, build about
+  26 seconds.
+- Preview smoke test ran logged out against the demo journey, which reaches every surface this
+  release changed. Instrumented on the deployed build: sidebar 224px with three 44px/15px nav rows;
+  week row four controls at 40px sharing one top; empty grid 420px with its action button; tray
+  260px; budget table with a header row; seven month labels at 0.00px offset from their columns;
+  legend reduced to four items with the prose line absent and the key showing eight drawn rows;
+  journal duration ending 79px from the right edge of a 1026px row, with day totals in the sticky
+  header; goal cards equal height with the add cell present. No text under 13px anywhere except
+  12px axis labels, and no horizontal overflow on any of the four views. Console reported 0 errors
+  and 0 warnings. Checked again at 390px on localhost: no overflow on any view.
+- **Not verified on the deployed build:** anything behind sign-in — the import review table, the
+  guided setup screens, the running timer and the fullscreen timer surface. Preview auth still has
+  `mailer_autoconfirm` off on `uni-tracker-preview`, so no disposable account can sign in there.
+  Those surfaces were changed only by the token sweep (sizes and greys), were checked by reading
+  their stylesheets, and the import table was widened to 820px so a 13px select still fits.
+
+
 ### Known issues
 
 - Resolved in release `b546fb9`: the weekly intention summary now counts planned session duration separately from weekly goal budgets. Imported planned activities no longer depend on having a budget to appear in that summary.
