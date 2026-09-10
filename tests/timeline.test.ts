@@ -4,6 +4,7 @@ import {
   buildSemesters,
   addDays,
   daysBetween,
+  elapsedShare,
   formatDate,
   streak,
   demoData,
@@ -87,4 +88,16 @@ test("dates read the same with or without the year", () => {
   assert.equal(formatDate("2026-09-07", true), "07/09/2026");
   assert.equal(formatDate("2026-01-01"), "01/01");
   assert.equal(formatDate("2026-12-31", true), "31/12/2026");
+});
+
+test("elapsed share measures the stretch it is given, clamped at both ends", () => {
+  // A semester running 03/08/2026 to 31/01/2027 is 182 days long.
+  const start = "2026-08-03",
+    end = "2027-01-31";
+  assert.equal(elapsedShare(start, end, start), 0);
+  assert.equal(elapsedShare(start, end, "2026-09-10"), 21);
+  assert.equal(elapsedShare(start, end, end), 99);
+  // Before it starts and after it ends, nothing runs off the ends.
+  assert.equal(elapsedShare(start, end, "2026-06-01"), 0);
+  assert.equal(elapsedShare(start, end, "2027-06-01"), 100);
 });

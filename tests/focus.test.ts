@@ -12,7 +12,7 @@ import {
   splitColor,
   summarizeDays,
 } from "../src/lib/focus";
-import { demoData, type Activity } from "../src/lib/timeline";
+import { demoData, GOAL_COLORS, type Activity } from "../src/lib/timeline";
 const { goals, activities } = demoData("2026-09-06");
 const event = (patch: Partial<Activity>): Activity => ({
   ...activities[0],
@@ -66,7 +66,8 @@ test("periods use calendar weeks/months including leap years and year boundary",
 });
 test("two deadlines split diagonally; logging same goal does not add another segment", () => {
   const deadline = goals[0].deadline!;
-  const pair = [goals[0], { ...goals[5], deadline }];
+  const midterm = goals.find((g) => g.milestone_kind === "midterm")!;
+  const pair = [goals[0], { ...midterm, deadline }];
   const days = summarizeDays(pair, [event({ occurred_on: deadline })]);
   const day = days.get(deadline)!;
   assert.equal(day.colors.length, 2);
@@ -76,9 +77,13 @@ test("two deadlines split diagonally; logging same goal does not add another seg
   assert.ok(day.label.includes(pair[1].title));
 });
 test("collision summaries retain every item while drawing at most four segments", () => {
-  const sameDay = goals
-    .slice(0, 6)
-    .map((g) => ({ ...g, deadline: "2026-09-06" }));
+  // Six goals landing on one day, however many the demo happens to carry.
+  const sameDay = Array.from({ length: 6 }, (_, i) => ({
+    ...goals[i % goals.length],
+    id: `clash-${i}`,
+    color: GOAL_COLORS[i],
+    deadline: "2026-09-06",
+  }));
   const day = summarizeDays(sameDay, []).get("2026-09-06")!;
   assert.equal(day.colors.length, 6);
   assert.equal(day.deadlines.length, 6);

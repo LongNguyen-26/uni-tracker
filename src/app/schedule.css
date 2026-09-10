@@ -371,13 +371,6 @@
   font-size: var(--fs-meta);
   color: #697568;
 }
-/* The grid and what is waiting to go into it, side by side. */
-.week-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
-  align-items: start;
-  gap: 16px;
-}
 .hour-grid-scroll {
   position: relative;
   overflow: auto;
@@ -388,7 +381,7 @@
   min-width: 0;
 }
 .hour-grid-inner {
-  min-width: 620px;
+  min-width: 870px;
 }
 /* Nothing scheduled: show enough grid to recognise, not a screen of nothing. */
 .hour-grid-scroll.is-empty {
@@ -604,24 +597,14 @@
 .tray-event.planned {
   border-style: dashed;
 }
-/* Its own column beside the grid: the things still looking for an hour. */
+/* Below the grid, across its width: the things still looking for an hour. */
 .unscheduled-tray {
   display: grid;
-  align-content: start;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  min-width: 0;
+  gap: 10px;
+  margin-top: 16px;
 }
 .unscheduled-tray h3 {
   font-size: var(--fs-card);
-}
-.unscheduled-tray > p {
-  font-size: var(--fs-meta);
-  color: var(--ink-400);
-  margin-top: -6px;
 }
 .unscheduled-tray small {
   display: block;
@@ -631,20 +614,13 @@
   margin-bottom: 6px;
 }
 .tray-items {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
-}
-.unscheduled-tray .tray-event {
-  width: 100%;
 }
 .hour-all-day .tray-event {
   width: 100%;
   margin-bottom: 3px;
-}
-@media (max-width: 1100px) {
-  .week-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 @media (max-width: 680px) {
   .hour-grid-controls {

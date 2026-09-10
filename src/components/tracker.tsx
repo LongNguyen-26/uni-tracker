@@ -18,6 +18,7 @@ import {
   LoaderCircle,
   LogIn,
   LogOut,
+  Maximize2,
   Menu,
   Pencil,
   Play,
@@ -34,6 +35,7 @@ import {
   CATEGORIES,
   MILESTONE_LABELS,
   daysBetween,
+  elapsedShare,
   demoData,
   formatDate,
   streak,
@@ -171,8 +173,13 @@ function SemesterCard({
       <div className="semester-heading">
         <div>
           <h3>
-            <button className="text-button" onClick={onOpen}>
+            <button
+              className="text-button"
+              onClick={onOpen}
+              title={zoomed ? undefined : "Phóng to học kỳ này"}
+            >
               {semester.label}
+              {!zoomed && <Maximize2 size={14} />}
             </button>
           </h3>
           <span className="semester-date">
@@ -899,23 +906,18 @@ export default function Tracker() {
         };
       })()
     : null;
-  const journeyProgress = semesters.length
-    ? Math.max(
-        0,
-        Math.min(
-          100,
-          Math.round(
-            (daysBetween(semesters[0].start, today) /
-              (daysBetween(
-                semesters[0].start,
-                semesters[semesters.length - 1].end,
-              ) +
-                1)) *
-              100,
-          ),
-        ),
-      )
-    : 0;
+  // The card names one semester and gives its two dates, so it reports that
+  // semester. Outside term time there is no semester to measure, and it falls
+  // back to the whole journey.
+  const journeyProgress = currentSemester
+    ? elapsedShare(currentSemester.start, currentSemester.end, today)
+    : semesters.length
+      ? elapsedShare(
+          semesters[0].start,
+          semesters[semesters.length - 1].end,
+          today,
+        )
+      : 0;
   function navigate(next: View, tab: JourneyTab = "map") {
     setView(next);
     setJourneyTab(tab);
@@ -1746,14 +1748,25 @@ export default function Tracker() {
                                   ) : null}
                                 </h3>
                               )}
-                              {/* One row, using the full width: a colour for the
-                                  goal, the title, and the number the eye scans. */}
+                              {/* One card, one row: the goal's icon, the title,
+                                  and the number the eye actually scans for. */}
                               <article className="journal-entry">
                                 <span
-                                  className="entry-dot"
-                                  style={{ background: activity.color }}
+                                  className="journal-icon"
+                                  style={{
+                                    color: activity.color,
+                                    background: `${activity.color}18`,
+                                  }}
                                   aria-hidden="true"
-                                />
+                                >
+                                  {activity.kind === "completion" ? (
+                                    <CircleCheck size={18} />
+                                  ) : activity.is_milestone ? (
+                                    <Flag size={18} />
+                                  ) : (
+                                    <BookOpen size={18} />
+                                  )}
+                                </span>
                                 <div>
                                   <h3>
                                     {activity.is_milestone ? "★ " : ""}
@@ -1972,8 +1985,9 @@ export default function Tracker() {
                                 </div>
                               ))}
                           </div>
-                          {/* Four reminders inline; the full set of conventions
-                              lives in the key behind the ⓘ, drawn not described. */}
+                          {/* All eight cell conventions, wrapping rather than
+                              squeezed onto one line. The paragraph that used to
+                              describe them in prose is drawn in the ⓘ key. */}
                           <div className="heatmap-legend">
                             <span>
                               <i className="legend-today" />
@@ -1982,6 +1996,19 @@ export default function Tracker() {
                             <span>
                               <i className="legend-deadline" />
                               Có deadline
+                            </span>
+                            <span>
+                              <b>◆</b> Cột mốc
+                            </span>
+                            <span>
+                              <b>G / C</b> Thi GK / CK
+                            </span>
+                            <span>
+                              <b>★</b> Đã đạt
+                            </span>
+                            <span>
+                              <i className="legend-planned" />
+                              Dự định
                             </span>
                             <span>
                               <i className="legend-split" />
@@ -2048,7 +2075,11 @@ export default function Tracker() {
                               <span style={{ width: `${journeyProgress}%` }} />
                             </div>
                             <div className="journey-caption">
-                              <span>Thời gian đã đi qua</span>
+                              <span>
+                                {currentSemester
+                                  ? "Thời gian kỳ này đã đi qua"
+                                  : "Thời gian đã đi qua"}
+                              </span>
                               <strong>{journeyProgress}%</strong>
                             </div>
                           </section>

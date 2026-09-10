@@ -13,7 +13,9 @@ import { backupRows, pauseBackupSession } from "../src/lib/backup";
 import type { FocusSession } from "../src/lib/planning";
 
 test("legacy final deadline does not change checklist progress; intermediate and final coexist", () => {
-  const g = demoData("2026-09-08").goals[2];
+  const g = demoData("2026-09-08").goals.find(
+    (x) => x.tracking_mode === "checklist",
+  )!;
   const steps = goalSteps(g);
   assert.equal(calculatedProgress({ ...g, checklist: steps }), g.progress);
   const extra = {
@@ -30,7 +32,9 @@ test("legacy final deadline does not change checklist progress; intermediate and
     ).some((m) => m.step.id === "abstract"),
     true,
   );
-  const numeric = demoData("2026-09-08").goals[1];
+  const numeric = demoData("2026-09-08").goals.find(
+    (x) => x.tracking_mode === "numeric",
+  )!;
   assert.equal(
     calculatedProgress({ ...numeric, checklist: [{ ...extra, done: true }] }),
     0,

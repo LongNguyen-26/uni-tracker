@@ -69,7 +69,8 @@ test("settings reject overlapping terms and holidays outside term", () => {
   );
 });
 test("numeric goals show meaningful units and project progress is derived from steps", () => {
-  const g = demoData("2026-09-06").goals[1];
+  const demo = demoData("2026-09-06").goals;
+  const g = demo.find((x) => x.metric_unit === "band")!;
   assert.equal(goalProgressText(g), "6.5 → 7 band");
   assert.equal(calculatedProgress(g), 0);
   assert.equal(calculatedProgress({ ...g, metric_current: 7 }), 100);
@@ -81,7 +82,7 @@ test("numeric goals show meaningful units and project progress is derived from s
     }),
     100,
   );
-  const project = demoData("2026-09-06").goals[2];
+  const project = demo.find((x) => x.tracking_mode === "checklist")!;
   assert.equal(calculatedProgress(project), 50);
   assert.equal(goalProgressText(project), "2/4 cột mốc");
 });

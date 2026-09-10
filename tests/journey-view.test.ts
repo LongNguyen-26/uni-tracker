@@ -79,7 +79,9 @@ test("estimated date reminders begin 14 days before, persist after the range, an
   assert.equal(milestoneReminder(step, "2026-11-30"), "upcoming");
   assert.equal(milestoneReminder(step, "2026-12-01"), "overdue");
   assert.equal(milestoneReminder({ ...step, done: true }, "2026-11-20"), null);
-  const base = demoData("2026-09-08").goals[1];
+  const base = demoData("2026-09-08").goals.find(
+    (g) => g.metric_unit === "band",
+  )!;
   const goal = {
     ...base,
     tracking_mode: "numeric" as const,

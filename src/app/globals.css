@@ -36,9 +36,9 @@
 
   --radius: 10px;
   --radius-control: 8px;
-  --radius-cell: 4px;
+  --radius-cell: 2px;
   --sidebar: 224px;
-  --content: 1160px;
+  --content: 1660px;
 }
 /* Every figure the eye compares down a column. */
 .figure,
@@ -433,7 +433,7 @@ nav[aria-label="Điều hướng chính"] {
 .main-content {
   max-width: var(--content);
   margin: auto;
-  padding: 24px 32px 0;
+  padding: 24px 36px 0;
 }
 .demo-banner {
   display: flex;
@@ -764,8 +764,24 @@ select {
   margin-bottom: 16px;
 }
 .semester-heading h3 {
-  font-size: var(--fs-meta);
+  font-size: var(--fs-card);
   font-weight: 600;
+}
+.semester-heading h3 .text-button {
+  gap: 5px;
+  color: var(--ink-900);
+  font-size: inherit;
+  font-weight: inherit;
+}
+.semester-heading h3 .text-button:hover {
+  color: var(--green-dark);
+  text-decoration: none;
+}
+.semester-heading h3 svg {
+  color: var(--ink-400);
+}
+.semester-heading h3 .text-button:hover svg {
+  color: var(--green);
 }
 .semester-date {
   font-size: var(--fs-meta);
@@ -944,11 +960,15 @@ select {
   align-items: center;
   gap: 7px;
 }
+.heatmap-legend b {
+  font-weight: 700;
+  color: var(--ink-900);
+}
 .heatmap-legend i {
-  width: 13px;
-  height: 13px;
+  width: 11px;
+  height: 11px;
   display: inline-block;
-  border-radius: 3px;
+  border-radius: var(--radius-cell);
 }
 .legend-band {
   background: #7c3aed26;
@@ -1628,10 +1648,6 @@ select {
 }
 .journal-section {
   max-width: 100%;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 4px 20px 8px;
 }
 /* The day is a header, not a card: it sticks, and it says what the day came to. */
 .journal-date {
@@ -1645,36 +1661,38 @@ select {
   font-size: var(--fs-meta);
   font-weight: 600;
   color: var(--ink-600);
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  background: var(--bg);
   margin: 0;
-  padding: 16px 0 8px;
+  padding: 18px 0 8px;
 }
 .journal-date b {
   font-weight: 600;
   color: var(--ink-400);
   font-variant-numeric: tabular-nums;
 }
-/* One row across the full width; the frame is a divider, not 999 boxes. */
+/* A card per entry, sitting close to its neighbours: one row of content, so it
+   is only as tall as the row needs. */
 .journal-entry {
   display: flex;
   gap: 12px;
-  align-items: baseline;
-  border-bottom: 1px solid var(--line);
-  padding: 12px 0;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 10px 14px;
+  margin-bottom: 6px;
 }
 .journal-entry:hover {
-  background: var(--surface-soft);
-  box-shadow:
-    -12px 0 var(--surface-soft),
-    12px 0 var(--surface-soft);
+  border-color: #cfd6cf;
 }
-.entry-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+.journal-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
   flex-shrink: 0;
-  transform: translateY(-1px);
+  align-self: flex-start;
 }
 .journal-entry > div:not(.row-actions) {
   flex: 1;
@@ -1711,6 +1729,8 @@ select {
   white-space: nowrap;
   text-align: right;
   min-width: 84px;
+  align-self: flex-start;
+  padding-top: 4px;
 }
 /* Editing is available, not advertised. */
 .journal-entry .row-actions {

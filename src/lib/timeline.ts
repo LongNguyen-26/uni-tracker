@@ -176,6 +176,19 @@ export function formatDate(value: string, year = false) {
   const month = String(d.getMonth() + 1).padStart(2, "0");
   return year ? `${day}/${month}/${d.getFullYear()}` : `${day}/${month}`;
 }
+/**
+ * How far through a dated stretch today is, 0–100. The card that shows this
+ * names a single semester and its two dates, so it has to measure that
+ * semester and not the whole degree.
+ */
+export function elapsedShare(start: string, end: string, today: string) {
+  const total = daysBetween(start, end) + 1;
+  if (total <= 0) return 0;
+  return Math.max(
+    0,
+    Math.min(100, Math.round((daysBetween(start, today) / total) * 100)),
+  );
+}
 export function daysBetween(a: string, b: string) {
   const toUTC = (v: string) => {
     const [y, m, d] = v.split("-").map(Number);
@@ -294,9 +307,8 @@ export function demoData(today: string): {
     created_at: `${today}T00:00:00Z`,
   });
   const goals = [
-    goal("g1", "Hoàn thành portfolio cá nhân", "Dự án", 75, 5),
     {
-      ...goal("g2", "Chinh phục IELTS 7.0", "Ngoại ngữ", 0, 24),
+      ...goal("g1", "Chinh phục IELTS 7.0", "Ngoại ngữ", 0, 24),
       tracking_mode: "numeric" as const,
       metric_current: 6.5,
       metric_target: 7,
@@ -304,7 +316,7 @@ export function demoData(today: string): {
       starts_on: addDays(today, -80),
     },
     {
-      ...goal("g3", "Viết paper nghiên cứu đầu tiên", "Học tập", 50, 45),
+      ...goal("g2", "Viết paper nghiên cứu đầu tiên", "Học tập", 50, 45),
       tracking_mode: "checklist" as const,
       checklist: ["Đề cương", "Thực nghiệm", "Viết bản thảo", "Nộp Paper"].map(
         (title, i) => ({ id: `paper-${i}`, title, done: i < 2 }),
@@ -312,66 +324,92 @@ export function demoData(today: string): {
       starts_on: addDays(today, -45),
     },
     {
-      ...goal("g4", "Có giải tại Hackathon", "Trải nghiệm", 100, -3),
-      tracking_mode: "milestone" as const,
-      milestone_kind: "achievement" as const,
-      color: "#ca8a04",
+      ...goal("g3", "GPA 3.5+ học kỳ này", "Học tập", 0, 60),
+      tracking_mode: "numeric" as const,
+      metric_current: 3.2,
+      metric_target: 3.5,
+      metric_unit: "GPA",
+      milestone_kind: "general" as const,
+      color: "#db2777",
     },
-    goal("g5", "Hoàn thành khóa Git & GitHub", "Kỹ năng", 100, -8),
     {
-      ...goal("g6", "Thi giữa kỳ · Xác suất thống kê", "Học tập", 0, 5),
+      ...goal("g4", "Thi giữa kỳ · Xác suất thống kê", "Học tập", 0, 5),
       tracking_mode: "milestone" as const,
       milestone_kind: "midterm" as const,
       color: "#ea580c",
     },
     {
-      ...goal("g7", "Thi cuối kỳ · Cấu trúc dữ liệu", "Học tập", 0, 24),
+      ...goal("g5", "Giành học bổng khuyến khích", "Trải nghiệm", 100, -3),
       tracking_mode: "milestone" as const,
-      milestone_kind: "final" as const,
-      color: "#dc2626",
+      milestone_kind: "achievement" as const,
+      color: "#ca8a04",
+    },
+  ];
+  /**
+   * A believable term rather than an exhaustive one: two goals carry the hours,
+   * the rest show what a goal looks like before any time goes into it. Every log
+   * has real start and end times so the week grid shows a week, not an empty
+   * ruler with a pile of unplaced cards beneath it.
+   */
+  const LOGS: {
+    goalId: string | null;
+    title: string;
+    minutes: number;
+    hour: number;
+  }[] = [
+    {
+      goalId: "g1",
+      title: "Luyện IELTS Listening & Reading",
+      minutes: 45,
+      hour: 8,
     },
     {
-      ...goal("g8", "GPA 3.5+ HK5", "Học tập", 0, 60),
-      tracking_mode: "numeric" as const,
-      metric_current: 3.2,
-      metric_target: 3.5,
-      metric_unit: "GPA",
-      semester_index: 4,
-      milestone_kind: "general" as const,
-      color: "#db2777",
+      goalId: "g2",
+      title: "Đọc tài liệu và viết bản nháp paper",
+      minutes: 90,
+      hour: 14,
     },
+    { goalId: null, title: "Đọc sách và ghi chú", minutes: 30, hour: 20 },
   ];
   const activities: Activity[] = [];
   const first = buildSemesters(profile.start_year, 9)[0].start;
-  for (let i = 0; i <= daysBetween(first, today); i++) {
-    if ((i * 17 + 5) % 13 < 6) continue;
-    for (let j = 0; j < 1 + (i % 4); j++)
+  const span = daysBetween(first, today);
+  const termStart = Math.max(0, span - 40);
+  let turn = 0;
+  for (let i = 0; i <= span; i++) {
+    // Earlier terms keep a light trace so the four-year map still reads as
+    // lived-in; the term on screen is where the detail belongs. Today always
+    // has something, because the sidebar opens on it.
+    const active =
+      i === span || (i >= termStart ? (i * 7) % 3 !== 1 : (i * 11) % 6 === 2);
+    if (!active) continue;
+    const count = i === span ? 3 : i >= termStart ? 1 + ((i * 5) % 2) : 1;
+    const day = addDays(first, i);
+    for (let j = 0; j < count; j++) {
+      // Rotate through the logs by how many have been written, not by the day
+      // index, or the day formula decides which goal ever gets any hours.
+      const log = LOGS[turn++ % LOGS.length];
+      const start = `${day}T${String(log.hour).padStart(2, "0")}:00`;
+      const end = `${day}T${String(log.hour + Math.floor(log.minutes / 60)).padStart(2, "0")}:${String(log.minutes % 60).padStart(2, "0")}`;
       activities.push({
         id: `demo-${i}-${j}`,
         user_id: "demo",
-        goal_id: ["g2", "g3", "g1", null][j],
-        title: [
-          "Luyện IELTS Listening & Reading",
-          "Đọc tài liệu và viết bản nháp paper",
-          "Xây dựng dự án portfolio",
-          "Đọc sách và ghi chú",
-        ][j],
+        goal_id: log.goalId,
+        title: log.title,
         notes: "",
-        occurred_on: addDays(first, i),
+        occurred_on: day,
         kind: "event",
-        duration_minutes: [45, 90, 60, 20][j],
-        started_at: null,
-        ended_at: null,
+        duration_minutes: log.minutes,
+        started_at: start,
+        ended_at: end,
         session_id: null,
-        color:
-          goals.find((g) => g.id === ["g2", "g3", "g1", null][j])?.color ||
-          "#237a4b",
-        goal_title:
-          goals.find((g) => g.id === ["g2", "g3", "g1", null][j])?.title || "",
+        color: goals.find((g) => g.id === log.goalId)?.color || "#237a4b",
+        goal_title: goals.find((g) => g.id === log.goalId)?.title || "",
         is_milestone: false,
         milestone_kind: "general",
-        created_at: `${addDays(first, i)}T08:00:00Z`,
+        created_at: `${day}T08:00:00Z`,
       });
+    }
   }
   goals
     .filter((g) => g.completed_on)
