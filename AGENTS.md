@@ -182,6 +182,52 @@ affected environment, not just a redeploy of another one.
   their stylesheets, and the import table was widened to 820px so a 13px select still fits.
 
 
+### Preview release `22efa3b` — 2026-09-10 (sample journey and refresh revisions, branch only)
+
+- Branch `refactor/ui-v2` only. Production still runs `fef32b5`. No route, schema, RLS or RPC
+  change; one new pure helper (`elapsedShare`) with a test.
+- **The sample journey is the fix for three separate complaints.** It carried eight goals, 999
+  logs, and no timestamps at all, so every log fell into the unscheduled tray — which is why the
+  week grid was an empty ruler with a column of loose cards beside it. It is now five goals a
+  student would recognise (IELTS, first paper, GPA, a midterm, a scholarship), two of which carry
+  hours, and 161 logs that all have real start and end times and therefore land in the grid at the
+  hour they were worked. Nothing in it is specific to a computing degree any more.
+- **Reverted from `748d8f0` after the user reviewed it:** the week grid keeps its full width and
+  870px floor, and what is unscheduled goes back beneath it across the width, rendered only when
+  something is in it; day cells return to a 2px corner; the content column returns to 1660px, since
+  1160px had left both the four-year map and the term map feeling cramped; the cell legend carries
+  all eight conventions again. The drawn key behind the ⓘ stays and the prose paragraph does not
+  come back.
+- **Journal** returns to cards — rounded 8px, one row tall, 6px apart — with the goal's icon back
+  at the head of each row in place of the colour dot. Full-width rows, the right-aligned tabular
+  duration and the sticky day header with that day's total are kept from the refresh.
+- **"Học kỳ 1"** was the way into a term but read as a caption, and removing its `↗` in the refresh
+  left nothing saying it could be opened. It is now 16px with a zoom icon beside it.
+- **Corrected:** the green current-phase card named one semester, printed that semester's two
+  dates, then reported progress through the whole four-year degree — 54% where the term stood at
+  21%. `elapsedShare` measures the stretch it is handed, and the label now reads "Thời gian kỳ này
+  đã đi qua". This is the same code path for a signed-in user as for the sample journey; only the
+  dates differ.
+- Tests that reached into `demoData` by array index now select goals by what they measure, so the
+  fixtures no longer break when the sample journey changes.
+- Validation on `22efa3b`: 86 unit tests, typecheck, lint, prettier (on the files this branch
+  touched) and the production build pass.
+- Preview READY: `dpl_BaAgkNqDGFpQ3SUe6dKP2EFyvJbE` for
+  `22efa3b7ead0c865d69c38c33d875e2991b30592`, branch alias assigned, no alias error, build about
+  24 seconds.
+- Measured on the deployed build, logged out, at 1440×900: week grid 1129px wide with an 870px
+  floor, six cards placed in it, no unscheduled tray and no empty-state block, axis 07:00–22:00,
+  content column 1660px; five goal cards with two week strips and the add-goal cell; day cells at
+  2px, "Học kỳ 1" at 16px with its zoom icon, eight legend items, the green card reading 21% for
+  the term; journal header at 161, cards at 8px radius 6px apart, 71px tall, with the icon restored
+  and day totals in the sticky header. No horizontal overflow on any view, console clean. Checked
+  again at 390px on localhost: no overflow on any of the four views.
+- **Still not verified on a deployed build:** everything behind sign-in — the import review table,
+  the guided setup screens, the running timer and the fullscreen timer surface. Preview auth now
+  has autoconfirm on, but this session cannot create an account or enter a password, so those
+  surfaces remain covered by their stylesheets, the unit tests and the earlier localhost runs only.
+
+
 ### Known issues
 
 - Resolved in release `b546fb9`: the weekly intention summary now counts planned session duration separately from weekly goal budgets. Imported planned activities no longer depend on having a budget to appear in that summary.
