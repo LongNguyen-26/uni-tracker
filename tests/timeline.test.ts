@@ -15,7 +15,9 @@ test("eight semesters contain every day once including leap day", () => {
   assert.equal(semesters.length, 8);
   assert.equal(semesters[0].start, "2023-09-01");
   assert.equal(semesters[7].end, "2027-08-31");
-  const days = semesters.flatMap((s) => s.days.filter((d) => d && d >= s.start && d <= s.end));
+  const days = semesters.flatMap((s) =>
+    s.days.filter((d) => d && d >= s.start && d <= s.end),
+  );
   assert.equal(days.length, 1461);
   assert.equal(new Set(days).size, 1461);
   assert.ok(days.includes("2024-02-29"));
@@ -28,7 +30,9 @@ test("eight semesters contain every day once including leap day", () => {
 test("custom start months cross year boundaries without gaps", () => {
   for (let month = 1; month <= 12; month++) {
     const semesters = buildSemesters(2024, month);
-    const days = semesters.flatMap((s) => s.days.filter((d) => d && d >= s.start && d <= s.end));
+    const days = semesters.flatMap((s) =>
+      s.days.filter((d) => d && d >= s.start && d <= s.end),
+    );
     assert.equal(new Set(days).size, days.length);
     assert.equal(
       days.length,
